@@ -1,7 +1,4 @@
-use std::{
-    io::{Read, Write},
-    str::FromStr,
-};
+use std::{io::Write, str::FromStr};
 
 use rand::{Rng, seq::SliceRandom};
 

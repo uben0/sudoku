@@ -1,7 +1,4 @@
-use std::{
-    io::{Read, Write},
-    path::PathBuf,
-};
+use std::{io::Write, path::PathBuf};
 
 mod cell;
 mod resulting;
@@ -25,32 +22,28 @@ enum Command {
 
 fn main() {
     let Args { command } = Args::parse();
-    match command {
-        Command::Solve { input } => {
-            let content = std::fs::read_to_string(input).unwrap();
-            let mut sudoku: SudokuAny = content.parse().unwrap();
-            if let Some(solved) = sudoku.brute_force(&mut 20_000) {
-                solved.print(&mut std::io::stdout());
+    std::thread::Builder::new()
+        .stack_size(300_000_000)
+        .spawn(move || match command {
+            Command::Solve { input } => {
+                let content = std::fs::read_to_string(input).unwrap();
+                let mut sudoku: SudokuAny = content.parse().unwrap();
+                if let Some(solved) = sudoku.brute_force(&mut 20_000) {
+                    solved.print(&mut std::io::stdout());
+                }
             }
-        }
-        Command::Generate { size, seed } => {
-            println!("hiho");
-            std::thread::Builder::new()
-                .stack_size(300_000_000)
-                .spawn(move || {
-                    println!("hoho");
-                    let seed = seed.unwrap_or_else(|| rand::random());
-                    let mut seed_block = [0; 32];
-                    seed_block[0..16].copy_from_slice(&seed.to_be_bytes());
-                    let mut rng = SmallRng::from_seed(seed_block);
-                    let sudoku = SudokuAny::generate(size, &mut rng);
-                    sudoku.print(&mut std::io::stdout());
-                })
-                .unwrap()
-                .join()
-                .unwrap();
-        }
-    }
+            Command::Generate { size, seed } => {
+                let seed = seed.unwrap_or_else(|| rand::random());
+                let mut seed_block = [0; 32];
+                seed_block[0..16].copy_from_slice(&seed.to_be_bytes());
+                let mut rng = SmallRng::from_seed(seed_block);
+                let sudoku = SudokuAny::generate(size, &mut rng);
+                sudoku.print(&mut std::io::stdout());
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }
 
 /// The interface abstracting the idea of a game.
