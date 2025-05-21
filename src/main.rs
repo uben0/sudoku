@@ -23,7 +23,7 @@ enum Command {
 fn main() {
     let Args { command } = Args::parse();
     std::thread::Builder::new()
-        .stack_size(300_000_000)
+        .stack_size(100_000_000)
         .spawn(move || match command {
             Command::Solve { input } => {
                 let content = std::fs::read_to_string(input).unwrap();

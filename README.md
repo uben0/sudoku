@@ -28,8 +28,8 @@ Don't forget to run in `release` mode for instantaneous solving and generation.
 ## TODO
 
 - [ ] Benchmark.
-- [ ] Remove generic parameter `R`.
-- [ ] Remove generic parameter `NN`.
+- [x] Remove generic parameter `R`.
+- [x] Remove generic parameter `NN`.
 - [ ] Remove `Game` trait.
 - [ ] Fix invalid moves being available.
 - [ ] Optimize.
