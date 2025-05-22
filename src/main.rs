@@ -39,13 +39,10 @@ fn main() {
                     }
                 }
                 Command::Generate { size } => {
-                    #[cfg(feature = "verbose")]
                     let start_time = Instant::now();
                     let sudoku = SudokuAny::generate(size, &mut rng);
-                    #[cfg(feature = "verbose")]
                     let elapsed = start_time.elapsed();
                     sudoku.print(&mut std::io::stdout());
-                    #[cfg(feature = "verbose")]
                     println!("elapsed: {:?}", elapsed);
                 }
             }

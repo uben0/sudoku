@@ -5,7 +5,6 @@ use std::{
 };
 
 use rand::{Rng, seq::SliceRandom};
-use tinyvec::SliceVec;
 
 use super::{Game, Resulting, cell::Cell};
 
@@ -159,15 +158,6 @@ impl<const N: usize> Sudoku<N> {
     /// It may fail if the grid turns out to be inconsistent, in that case
     /// no moves are pushed and it returns `None`
     fn remove(&mut self, value: u32, pos: Pos) -> Option<usize> {
-        #[cfg(feature = "verbose")]
-        println!(
-            "removes {} at {}-{} {}-{}",
-            value + 1,
-            pos.y_1,
-            pos.y_2,
-            pos.x_1,
-            pos.x_2
-        );
         // TODO: why failing
         if !self.grid[pos].remove(value) {
             return None;
@@ -178,8 +168,6 @@ impl<const N: usize> Sudoku<N> {
         // if the current cell has a unique possiblity
         // all correlated cells can't have it
         if let Some(value) = self.grid[pos].get_value() {
-            #[cfg(feature = "verbose")]
-            println!("value {} is unique, excluding correlated cells", value + 1);
             correlated_cells!(N as u8, pos, ipos, {
                 if self.grid[ipos].contains(value) {
                     if let Some(n) = self.remove(value, ipos) {
@@ -212,8 +200,6 @@ impl<const N: usize> Sudoku<N> {
             for unic in unics {
                 // multiple forced values means incoherent grid
                 if unic.len() > 1 {
-                    #[cfg(feature = "verbose")]
-                    println!("more than one enforced value in group");
                     self.pop_n_moves(count);
                     return None;
                 }
@@ -228,8 +214,6 @@ impl<const N: usize> Sudoku<N> {
                     if a == b && a == c {
                         Some(a)
                     } else {
-                        #[cfg(feature = "verbose")]
-                        println!("more than one enforced value from groups");
                         self.pop_n_moves(count);
                         return None;
                     }
@@ -238,8 +222,6 @@ impl<const N: usize> Sudoku<N> {
                     if a == b {
                         Some(a)
                     } else {
-                        #[cfg(feature = "verbose")]
-                        println!("more than one enforced value from groups");
                         self.pop_n_moves(count);
                         return None;
                     }
@@ -248,15 +230,6 @@ impl<const N: usize> Sudoku<N> {
             };
             // if there is an enforced value
             if let Some(value) = unic {
-                #[cfg(feature = "verbose")]
-                println!(
-                    "value {} is enforced at {}-{} {}-{}",
-                    value + 1,
-                    ipos.y_1,
-                    ipos.y_2,
-                    ipos.x_1,
-                    ipos.x_2
-                );
                 // we remove all other possibilities
                 if let Some(n) = self.place_number(value, ipos) {
                     count += n;
@@ -499,14 +472,6 @@ impl<const N: usize> FromStr for Sudoku<N> {
                     for x_2 in 0..N as u8 {
                         let pos = Pos { y_1, y_2, x_1, x_2 };
                         if let Some(value) = cells.next().unwrap().get_value() {
-                            println!(
-                                "placing {} at {}-{} {}-{}",
-                                value + 1,
-                                pos.y_1,
-                                pos.y_2,
-                                pos.x_1,
-                                pos.x_2
-                            );
                             let Some(_) = game.place_number(value, pos) else {
                                 game.print(std::io::stdout());
                                 panic!(
@@ -514,7 +479,6 @@ impl<const N: usize> FromStr for Sudoku<N> {
                                     value, y_1, y_2, x_1, x_2
                                 );
                             };
-                            game.print(std::io::stdout());
                         }
                     }
                 }

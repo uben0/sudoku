@@ -1,7 +1,6 @@
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
 
-use rand::{Rng, SeedableRng, rngs::SmallRng};
-use tinyvec::ArrayVec;
+use rand::Rng;
 
 /// Represents the content of one cell of the grid
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -189,6 +188,8 @@ impl<const R: usize> Iterator for Cell<R> {
 
 #[test]
 fn test_pop_random() {
+    use rand::{SeedableRng, rngs::SmallRng};
+
     let mut full = Cell::<5>::FULL;
     let mut empty = Cell::<5>::EMPTY;
     assert_eq!(full.len(), 25);
