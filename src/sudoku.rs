@@ -1,21 +1,19 @@
+use super::{Game, Resulting, cell::Cell};
+use rand::{Rng, seq::SliceRandom};
 use std::{
     io::Write,
     ops::{Index, IndexMut},
     str::FromStr,
 };
 
-use rand::{Rng, seq::SliceRandom};
-
-use super::{Game, Resulting, cell::Cell};
-
 /// The sudoku grid with perfomed moves
 ///
-/// `R` is the range of values, i.e. the MAX+1
 /// `N` The size of a square
-/// `NN` The size of the grid, `N*N`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sudoku<const N: usize> {
-    /// Two dimensional array of Cell
+    /// Four dimensional array of Cell
+    ///
+    /// Refer to [Pos] for dimension order
     grid: [[[[Cell<N>; N]; N]; N]; N],
     /// Remember the performed move in a stack
     /// `(removed_possiblity, [line, column])`
@@ -24,9 +22,13 @@ pub struct Sudoku<const N: usize> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Pos {
+    /// Selects the row chunk
     x_1: u8,
+    /// Selects the row line
     x_2: u8,
+    /// Selects the column chunk
     y_1: u8,
+    /// Selects the column line
     y_2: u8,
 }
 
@@ -41,40 +43,28 @@ macro_rules! correlated_cells {
         { $($exec:tt)* } // The block of code to execute for each correlated cell
     ) => {
         // line (without square)
-        for ix_1 in 0..$n {
-            if ix_1 != $pos.x_1 {
-                for ix_2 in 0..$n {
-                    let $ipos = Pos {
-                        x_1: ix_1,
-                        x_2: ix_2,
-                        ..$pos
-                    };
+        for x_1 in 0..$n {
+            if x_1 != $pos.x_1 {
+                for x_2 in 0..$n {
+                    let $ipos = Pos { x_1, x_2, ..$pos };
                     $($exec)*
                 }
             }
         }
         // column (without square)
-        for iy_1 in 0..$n {
-            if iy_1 != $pos.y_1 {
-                for iy_2 in 0..$n {
-                    let $ipos = Pos {
-                        y_1: iy_1,
-                        y_2: iy_2,
-                        ..$pos
-                    };
+        for y_1 in 0..$n {
+            if y_1 != $pos.y_1 {
+                for y_2 in 0..$n {
+                    let $ipos = Pos { y_1, y_2, ..$pos };
                     $($exec)*
                 }
             }
         }
         // square (full)
-        for iy_2 in 0..$n {
-            for ix_2 in 0..$n {
-                if iy_2 != $pos.y_2 || ix_2 != $pos.x_2 {
-                    let $ipos = Pos {
-                        y_2: iy_2,
-                        x_2: ix_2,
-                        ..$pos
-                    };
+        for y_2 in 0..$n {
+            for x_2 in 0..$n {
+                if y_2 != $pos.y_2 || x_2 != $pos.x_2 {
+                    let $ipos = Pos { y_2, x_2, ..$pos };
                     $($exec)*
                 }
             }
@@ -120,8 +110,7 @@ impl<const N: usize> Sudoku<N> {
                 }
             }
             // found experimentally
-            let mut tickets = 6_400;
-            if let Some(solved) = grid.brute_force(&mut tickets, rng) {
+            if let Some(solved) = grid.brute_force(rng) {
                 return solved;
             }
         }
@@ -311,11 +300,10 @@ impl<const N: usize> Sudoku<N> {
             self.grid[pos] |= Cell::from_value(value);
         }
     }
-    fn brute_force(&mut self, tickets: &mut u32, rng: &mut impl Rng) -> Option<Self> {
+    fn brute_force(&mut self, rng: &mut impl Rng) -> Option<Self> {
         if self.is_accepting() {
             return Some(self.clone());
         }
-        *tickets = tickets.checked_sub(1)?;
 
         let mut min = None;
         // for all cells
@@ -351,7 +339,7 @@ impl<const N: usize> Sudoku<N> {
         while let Some(value) = available.choose(rng) {
             available.remove(value);
             if let Some(mut result) = self.push_move((value, pos)) {
-                if let Some(found) = result.brute_force(tickets, rng) {
+                if let Some(found) = result.brute_force(rng) {
                     return Some(found);
                 }
             }
@@ -387,26 +375,14 @@ pub enum SudokuAny {
     Sudoku6(Sudoku<6>),
 }
 impl SudokuAny {
-    pub fn brute_force(&mut self, tickets: &mut u32, rng: &mut impl Rng) -> Option<Self> {
+    pub fn brute_force(&mut self, rng: &mut impl Rng) -> Option<Self> {
         match self {
-            SudokuAny::Sudoku1(sudoku) => {
-                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku1)
-            }
-            SudokuAny::Sudoku2(sudoku) => {
-                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku2)
-            }
-            SudokuAny::Sudoku3(sudoku) => {
-                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku3)
-            }
-            SudokuAny::Sudoku4(sudoku) => {
-                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku4)
-            }
-            SudokuAny::Sudoku5(sudoku) => {
-                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku5)
-            }
-            SudokuAny::Sudoku6(sudoku) => {
-                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku6)
-            }
+            SudokuAny::Sudoku1(sudoku) => (sudoku.brute_force(rng)).map(SudokuAny::Sudoku1),
+            SudokuAny::Sudoku2(sudoku) => (sudoku.brute_force(rng)).map(SudokuAny::Sudoku2),
+            SudokuAny::Sudoku3(sudoku) => (sudoku.brute_force(rng)).map(SudokuAny::Sudoku3),
+            SudokuAny::Sudoku4(sudoku) => (sudoku.brute_force(rng)).map(SudokuAny::Sudoku4),
+            SudokuAny::Sudoku5(sudoku) => (sudoku.brute_force(rng)).map(SudokuAny::Sudoku5),
+            SudokuAny::Sudoku6(sudoku) => (sudoku.brute_force(rng)).map(SudokuAny::Sudoku6),
         }
     }
     pub fn print(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
@@ -589,3 +565,16 @@ impl<const N: usize> Game for Sudoku<N> {
         self.moves.len() == N * N * N * N * (N * N - 1)
     }
 }
+
+// #[cfg(test)]
+// mod test {
+//     use super::SudokuAny;
+
+//     fn test_explore_space() {
+//         let sudoku: SudokuAny = include_str!("../grid-3-c.txt").parse().unwrap();
+//         for seed in 0..=256u8 {
+//             let mut rng = SmallRng::from_seed([seed; 32]);
+//             // sudoku.brute_force(tickets, rng)
+//         }
+//     }
+// }

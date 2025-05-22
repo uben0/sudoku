@@ -13,7 +13,10 @@ use sudoku::{LoadingError, SudokuAny};
 struct Args {
     #[command(subcommand)]
     command: Command,
+    #[arg(short, long)]
     seed: Option<u128>,
+    #[arg(short, long)]
+    time: bool,
 }
 
 #[derive(clap::Subcommand, Clone)]
@@ -23,7 +26,11 @@ enum Command {
 }
 
 fn main() {
-    let Args { seed, command } = Args::parse();
+    let Args {
+        seed,
+        command,
+        time,
+    } = Args::parse();
     std::thread::Builder::new()
         .stack_size(100_000_000)
         .spawn(move || {
@@ -40,6 +47,7 @@ fn main() {
                             return;
                         }
                     };
+                    let start_time = Instant::now();
                     let mut sudoku: SudokuAny = match content.parse() {
                         Ok(sudoku) => sudoku,
                         Err(LoadingError::InvalidSize { received }) => {
@@ -51,8 +59,13 @@ fn main() {
                             return;
                         }
                     };
-                    if let Some(solved) = sudoku.brute_force(&mut 20_000, &mut rng) {
+                    if let Some(solved) = sudoku.brute_force(&mut rng) {
+                        let elapsed = start_time.elapsed();
                         solved.print(&mut std::io::stdout()).unwrap();
+
+                        if time {
+                            println!("elapsed: {:?}", elapsed);
+                        }
                     }
                 }
                 Command::Generate { size } => {
@@ -60,7 +73,9 @@ fn main() {
                     let sudoku = SudokuAny::generate(size, &mut rng);
                     let elapsed = start_time.elapsed();
                     sudoku.print(&mut std::io::stdout()).unwrap();
-                    println!("elapsed: {:?}", elapsed);
+                    if time {
+                        println!("elapsed: {:?}", elapsed);
+                    }
                 }
             }
         })
