@@ -1,5 +1,8 @@
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
 
+use rand::{Rng, SeedableRng, rngs::SmallRng};
+use tinyvec::ArrayVec;
+
 /// Represents the content of one cell of the grid
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell<const N: usize> {
@@ -41,11 +44,38 @@ impl<const N: usize> Cell<N> {
             .then(|| self.bitset.trailing_zeros())
     }
 
+    #[inline]
+    pub fn get_random(self, rng: &mut impl Rng) -> Option<u32> {
+        match self.bitset.count_ones() {
+            0 => None,
+            1 => Some(self.bitset.trailing_zeros()),
+            n => match rng.random_range(0..n) {
+                0 => Some(self.bitset.trailing_zeros()),
+                1 => Some(63 - self.bitset.leading_zeros()),
+                n => {
+                    let mut bitset = self.bitset;
+                    for _ in 0..n - 1 {
+                        let value = bitset.trailing_zeros();
+                        bitset = bitset & !(1 << value);
+                    }
+                    Some(bitset.trailing_zeros())
+                }
+            },
+        }
+    }
+
+    #[inline]
+    pub const fn pop(&mut self, value: u32) {
+        debug_assert!(value < Self::R);
+        debug_assert!(self.contains(value));
+        self.bitset &= !(1 << value);
+    }
+
     /// Is `value` one of the possiblities
     #[inline]
     #[must_use]
-    pub fn contains(self, value: u32) -> bool {
-        debug_assert!((0..Self::R).contains(&value));
+    pub const fn contains(self, value: u32) -> bool {
+        debug_assert!(value < Self::R);
         self.bitset & (1 << value) != 0
     }
 
@@ -54,6 +84,7 @@ impl<const N: usize> Cell<N> {
     #[must_use]
     pub fn remove(&mut self, value: u32) -> bool {
         debug_assert!((0..Self::R).contains(&value));
+        // TODO: why checking len > 1
         if self.contains(value) && self.len() > 1 {
             self.bitset &= !(1 << value);
             true
@@ -103,7 +134,7 @@ impl<const N: usize> Cell<N> {
 }
 
 // Implement the bitwise OR operation (|)
-impl<const R: usize> BitOr for Cell<R> {
+impl<const N: usize> BitOr for Cell<N> {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
@@ -114,14 +145,14 @@ impl<const R: usize> BitOr for Cell<R> {
 }
 
 // Implement the bitwise OR operation for assignation (|=)
-impl<const R: usize> BitOrAssign for Cell<R> {
+impl<const N: usize> BitOrAssign for Cell<N> {
     fn bitor_assign(&mut self, rhs: Self) {
         *self = *self | rhs;
     }
 }
 
 // Implement the bitwise AND operation (&)
-impl<const R: usize> BitAnd for Cell<R> {
+impl<const N: usize> BitAnd for Cell<N> {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
@@ -132,7 +163,7 @@ impl<const R: usize> BitAnd for Cell<R> {
 }
 
 // Implement the bitwise NOT operation (!)
-impl<const R: usize> Not for Cell<R> {
+impl<const N: usize> Not for Cell<N> {
     type Output = Self;
 
     fn not(self) -> Self::Output {
@@ -154,4 +185,21 @@ impl<const R: usize> Iterator for Cell<R> {
         self.bitset = self.bitset & !(1 << value);
         Some(value)
     }
+}
+
+#[test]
+fn test_pop_random() {
+    let mut full = Cell::<5>::FULL;
+    let mut empty = Cell::<5>::EMPTY;
+    assert_eq!(full.len(), 25);
+    assert_eq!(empty.len(), 0);
+    let mut rng = SmallRng::from_seed([145; 32]);
+    while full.len() > 0 {
+        let value = full.get_random(&mut rng).unwrap();
+        full.pop(value);
+        assert!(!empty.contains(value));
+        empty |= Cell::from_value(value);
+    }
+    assert_eq!(full.len(), 0);
+    assert_eq!(empty.len(), 25);
 }

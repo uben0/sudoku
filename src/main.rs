@@ -1,4 +1,4 @@
-use std::{io::Write, path::PathBuf};
+use std::{io::Write, path::PathBuf, time::Instant};
 
 mod cell;
 mod resulting;
@@ -12,33 +12,42 @@ use sudoku::SudokuAny;
 struct Args {
     #[command(subcommand)]
     command: Command,
+    seed: Option<u128>,
 }
 
 #[derive(clap::Subcommand, Clone)]
 enum Command {
     Solve { input: PathBuf },
-    Generate { size: u32, seed: Option<u128> },
+    Generate { size: u32 },
 }
 
 fn main() {
-    let Args { command } = Args::parse();
+    let Args { seed, command } = Args::parse();
     std::thread::Builder::new()
         .stack_size(100_000_000)
-        .spawn(move || match command {
-            Command::Solve { input } => {
-                let content = std::fs::read_to_string(input).unwrap();
-                let mut sudoku: SudokuAny = content.parse().unwrap();
-                if let Some(solved) = sudoku.brute_force(&mut 20_000) {
-                    solved.print(&mut std::io::stdout());
+        .spawn(move || {
+            let seed = seed.unwrap_or_else(|| rand::random());
+            let mut seed_block = [0; 32];
+            seed_block[0..16].copy_from_slice(&seed.to_be_bytes());
+            let mut rng = SmallRng::from_seed(seed_block);
+            match command {
+                Command::Solve { input } => {
+                    let content = std::fs::read_to_string(input).unwrap();
+                    let mut sudoku: SudokuAny = content.parse().unwrap();
+                    if let Some(solved) = sudoku.brute_force(&mut 20_000, &mut rng) {
+                        solved.print(&mut std::io::stdout());
+                    }
                 }
-            }
-            Command::Generate { size, seed } => {
-                let seed = seed.unwrap_or_else(|| rand::random());
-                let mut seed_block = [0; 32];
-                seed_block[0..16].copy_from_slice(&seed.to_be_bytes());
-                let mut rng = SmallRng::from_seed(seed_block);
-                let sudoku = SudokuAny::generate(size, &mut rng);
-                sudoku.print(&mut std::io::stdout());
+                Command::Generate { size } => {
+                    #[cfg(feature = "verbose")]
+                    let start_time = Instant::now();
+                    let sudoku = SudokuAny::generate(size, &mut rng);
+                    #[cfg(feature = "verbose")]
+                    let elapsed = start_time.elapsed();
+                    sudoku.print(&mut std::io::stdout());
+                    #[cfg(feature = "verbose")]
+                    println!("elapsed: {:?}", elapsed);
+                }
             }
         })
         .unwrap()

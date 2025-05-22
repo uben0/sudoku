@@ -31,11 +31,12 @@ Don't forget to run in `release` mode for instantaneous solving and generation.
 - [x] Remove generic parameter `R`.
 - [x] Remove generic parameter `NN`.
 - [ ] Remove `Game` trait.
-- [ ] Fix invalid moves being available.
+- [x] Fix invalid moves being available.
 - [ ] Optimize.
 - [ ] Maybe avoid recursion by using a stack.
-- [ ] Better random choices.
+- [x] Better random choices.
 - [ ] Character mapping starting at 0.
 - [ ] Remove duplicated code.
 - [ ] Simplify rewinder.
 - [ ] Wasm friendly.
+- [ ] Error handling

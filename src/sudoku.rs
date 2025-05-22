@@ -5,6 +5,7 @@ use std::{
 };
 
 use rand::{Rng, seq::SliceRandom};
+use tinyvec::SliceVec;
 
 use super::{Game, Resulting, cell::Cell};
 
@@ -36,7 +37,6 @@ pub struct Pos {
 macro_rules! correlated_cells {
     (
         $n:expr, // The size of a square (N)
-        // $nn:expr, // The size of a square squared (N * N)
         $pos:expr, // The targated cell
         $ipos:ident, // The name of the variable succesively storing the correlated cell
         { $($exec:tt)* } // The block of code to execute for each correlated cell
@@ -122,7 +122,7 @@ impl<const N: usize> Sudoku<N> {
             }
             // found experimentally
             let mut tickets = 6_400;
-            if let Some(solved) = grid.brute_force(&mut tickets) {
+            if let Some(solved) = grid.brute_force(&mut tickets, rng) {
                 return solved;
             }
         }
@@ -140,7 +140,7 @@ impl<const N: usize> Sudoku<N> {
         debug_assert!(self.grid[pos].contains(value));
         let mut count = 0;
         for iv in self.grid[pos] {
-            if iv != value {
+            if iv != value && self.grid[pos].contains(iv) {
                 if let Some(n) = self.remove(iv, pos) {
                     count += n;
                 } else {
@@ -159,6 +159,16 @@ impl<const N: usize> Sudoku<N> {
     /// It may fail if the grid turns out to be inconsistent, in that case
     /// no moves are pushed and it returns `None`
     fn remove(&mut self, value: u32, pos: Pos) -> Option<usize> {
+        #[cfg(feature = "verbose")]
+        println!(
+            "removes {} at {}-{} {}-{}",
+            value + 1,
+            pos.y_1,
+            pos.y_2,
+            pos.x_1,
+            pos.x_2
+        );
+        // TODO: why failing
         if !self.grid[pos].remove(value) {
             return None;
         }
@@ -168,6 +178,8 @@ impl<const N: usize> Sudoku<N> {
         // if the current cell has a unique possiblity
         // all correlated cells can't have it
         if let Some(value) = self.grid[pos].get_value() {
+            #[cfg(feature = "verbose")]
+            println!("value {} is unique, excluding correlated cells", value + 1);
             correlated_cells!(N as u8, pos, ipos, {
                 if self.grid[ipos].contains(value) {
                     if let Some(n) = self.remove(value, ipos) {
@@ -187,6 +199,11 @@ impl<const N: usize> Sudoku<N> {
         // Maybe a correlated cell now is the only one with it in its correlated neigbourhood
         // If it is the case, it become its only possibility, and we cascade the effect
         correlated_cells!(N as u8, pos, ipos, {
+            // A determine cell will always result in enforcing its value
+            // It is already unique, so we don't have to do anything
+            if self.grid[ipos].len() == 1 {
+                continue;
+            }
             let unics = [
                 self.unic_on_row(ipos),
                 self.unic_on_column(ipos),
@@ -195,10 +212,13 @@ impl<const N: usize> Sudoku<N> {
             for unic in unics {
                 // multiple forced values means incoherent grid
                 if unic.len() > 1 {
+                    #[cfg(feature = "verbose")]
+                    println!("more than one enforced value in group");
                     self.pop_n_moves(count);
                     return None;
                 }
             }
+            // TODO: just merge the bitsets
             // The line, the column and the square may all enforce a unic value
             // We must check if it is the same, otherwise, it means the grid is incoherent
             let unics = unics.map(Cell::get_value);
@@ -208,6 +228,8 @@ impl<const N: usize> Sudoku<N> {
                     if a == b && a == c {
                         Some(a)
                     } else {
+                        #[cfg(feature = "verbose")]
+                        println!("more than one enforced value from groups");
                         self.pop_n_moves(count);
                         return None;
                     }
@@ -216,6 +238,8 @@ impl<const N: usize> Sudoku<N> {
                     if a == b {
                         Some(a)
                     } else {
+                        #[cfg(feature = "verbose")]
+                        println!("more than one enforced value from groups");
                         self.pop_n_moves(count);
                         return None;
                     }
@@ -224,6 +248,15 @@ impl<const N: usize> Sudoku<N> {
             };
             // if there is an enforced value
             if let Some(value) = unic {
+                #[cfg(feature = "verbose")]
+                println!(
+                    "value {} is enforced at {}-{} {}-{}",
+                    value + 1,
+                    ipos.y_1,
+                    ipos.y_2,
+                    ipos.x_1,
+                    ipos.x_2
+                );
                 // we remove all other possibilities
                 if let Some(n) = self.place_number(value, ipos) {
                     count += n;
@@ -300,15 +333,11 @@ impl<const N: usize> Sudoku<N> {
             self.grid[pos] |= Cell::from_value(value);
         }
     }
-    fn brute_force(&mut self, tickets: &mut u32) -> Option<Self> {
-        // let mut game = self.trivial_moves();
+    fn brute_force(&mut self, tickets: &mut u32, rng: &mut impl Rng) -> Option<Self> {
         if self.is_accepting() {
             return Some(self.clone());
         }
-        if *tickets == 0 {
-            return None;
-        }
-        *tickets -= 1;
+        *tickets = tickets.checked_sub(1)?;
 
         let mut min = None;
         // for all cells
@@ -320,13 +349,14 @@ impl<const N: usize> Sudoku<N> {
                         // how many possibilities
                         let len = self.grid[pos].len();
                         match (len, min) {
-                            // less than 2
-                            (0 | 1, _) => {}
-                            // more than 2, no previous minimum
+                            (0, _) => unreachable!(),
+                            (1, _) => {}
+                            // TODO: break loop when exactly 2
+                            // at least 2, no previous minimum
                             (_, None) => {
                                 min = Some((len, pos));
                             }
-                            // more than 2, compare to previous minimum
+                            // at least 2, compare to previous minimum
                             (_, Some((v, _))) if len < v => {
                                 min = Some((len, pos));
                             }
@@ -336,25 +366,21 @@ impl<const N: usize> Sudoku<N> {
                 }
             }
         }
-        // TODO: if available move is impossible, we may miss other cells
         // if we found a cell
-        if let Some((_, pos)) = min {
-            // for each possibilities
-            for value in self.grid[pos] {
-                // push the move and call the callback function
-                // TODO: investigate why available moves can be invalid
-                // let Some(mut result) = game.push_move((value, [y, x])) else {
-                //     game.print(&mut std::io::stdout());
-                //     println!("y={} x={}  {}", y, x, value);
-                //     unreachable!()
-                // };
-                if let Some(mut result) = self.push_move((value, pos)) {
-                    if let Some(found) = result.brute_force(tickets) {
-                        return Some(found);
-                    }
+        let (_, pos) = min?;
+        // for each possibilities
+        let mut available = self.grid[pos];
+        while let Some(value) = available.get_random(rng) {
+            available.pop(value);
+            if let Some(mut result) = self.push_move((value, pos)) {
+                if let Some(found) = result.brute_force(tickets, rng) {
+                    return Some(found);
                 }
             }
         }
+        // for value in self.grid[pos] {
+        //     // push the move and call the callback function
+        // }
         return None;
     }
     // pub fn save(&self, mut writer: impl Write) {
@@ -383,14 +409,26 @@ pub enum SudokuAny {
     Sudoku6(Sudoku<6>),
 }
 impl SudokuAny {
-    pub fn brute_force(&mut self, tickets: &mut u32) -> Option<Self> {
+    pub fn brute_force(&mut self, tickets: &mut u32, rng: &mut impl Rng) -> Option<Self> {
         match self {
-            SudokuAny::Sudoku1(sudoku) => (sudoku.brute_force(tickets)).map(SudokuAny::Sudoku1),
-            SudokuAny::Sudoku2(sudoku) => (sudoku.brute_force(tickets)).map(SudokuAny::Sudoku2),
-            SudokuAny::Sudoku3(sudoku) => (sudoku.brute_force(tickets)).map(SudokuAny::Sudoku3),
-            SudokuAny::Sudoku4(sudoku) => (sudoku.brute_force(tickets)).map(SudokuAny::Sudoku4),
-            SudokuAny::Sudoku5(sudoku) => (sudoku.brute_force(tickets)).map(SudokuAny::Sudoku5),
-            SudokuAny::Sudoku6(sudoku) => (sudoku.brute_force(tickets)).map(SudokuAny::Sudoku6),
+            SudokuAny::Sudoku1(sudoku) => {
+                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku1)
+            }
+            SudokuAny::Sudoku2(sudoku) => {
+                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku2)
+            }
+            SudokuAny::Sudoku3(sudoku) => {
+                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku3)
+            }
+            SudokuAny::Sudoku4(sudoku) => {
+                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku4)
+            }
+            SudokuAny::Sudoku5(sudoku) => {
+                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku5)
+            }
+            SudokuAny::Sudoku6(sudoku) => {
+                (sudoku.brute_force(tickets, rng)).map(SudokuAny::Sudoku6)
+            }
         }
     }
     pub fn print(&self, writer: &mut impl Write) {
@@ -451,6 +489,7 @@ impl<const N: usize> FromStr for Sudoku<N> {
             .filter(|c| !c.is_whitespace())
             .map(Cell::<N>::from_char)
             .collect();
+        // TODO: don't collect into Vec
         assert_eq!(cells.len(), N * N * N * N);
         let mut game = Self::default();
         let mut cells = cells.iter();
@@ -458,14 +497,24 @@ impl<const N: usize> FromStr for Sudoku<N> {
             for y_2 in 0..N as u8 {
                 for x_1 in 0..N as u8 {
                     for x_2 in 0..N as u8 {
+                        let pos = Pos { y_1, y_2, x_1, x_2 };
                         if let Some(value) = cells.next().unwrap().get_value() {
-                            let Some(_) = game.place_number(value, Pos { y_1, y_2, x_1, x_2 })
-                            else {
+                            println!(
+                                "placing {} at {}-{} {}-{}",
+                                value + 1,
+                                pos.y_1,
+                                pos.y_2,
+                                pos.x_1,
+                                pos.x_2
+                            );
+                            let Some(_) = game.place_number(value, pos) else {
+                                game.print(std::io::stdout());
                                 panic!(
                                     "inconscistent grid value {:?} at [{}, {}, {}, {}]",
                                     value, y_1, y_2, x_1, x_2
                                 );
                             };
+                            game.print(std::io::stdout());
                         }
                     }
                 }
