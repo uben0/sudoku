@@ -37,21 +37,27 @@ impl<const N: usize> Cell<N> {
     /// If one and exactly one value, return it
     #[inline]
     #[must_use]
-    pub fn get_value(self) -> Option<u32> {
-        self.bitset
-            .is_power_of_two()
-            .then(|| self.bitset.trailing_zeros())
+    pub const fn get_value(self) -> Option<u32> {
+        if self.bitset.is_power_of_two() {
+            Some(self.bitset.trailing_zeros())
+        } else {
+            None
+        }
     }
 
     #[inline]
-    pub fn get_random(self, rng: &mut impl Rng) -> Option<u32> {
+    #[must_use]
+    pub fn choose(self, rng: &mut impl Rng) -> Option<u32> {
         match self.bitset.count_ones() {
             0 => None,
             1 => Some(self.bitset.trailing_zeros()),
             n => match rng.random_range(0..n) {
+                // choose last one
                 0 => Some(self.bitset.trailing_zeros()),
+                // choose first one
                 1 => Some(63 - self.bitset.leading_zeros()),
                 n => {
+                    // iterate through n values
                     let mut bitset = self.bitset;
                     for _ in 0..n - 1 {
                         let value = bitset.trailing_zeros();
@@ -61,13 +67,6 @@ impl<const N: usize> Cell<N> {
                 }
             },
         }
-    }
-
-    #[inline]
-    pub const fn pop(&mut self, value: u32) {
-        debug_assert!(value < Self::R);
-        debug_assert!(self.contains(value));
-        self.bitset &= !(1 << value);
     }
 
     /// Is `value` one of the possiblities
@@ -80,16 +79,10 @@ impl<const N: usize> Cell<N> {
 
     /// Remove if present, the `value` possiblity
     #[inline]
-    #[must_use]
-    pub fn remove(&mut self, value: u32) -> bool {
-        debug_assert!((0..Self::R).contains(&value));
-        // TODO: why checking len > 1
-        if self.contains(value) && self.len() > 1 {
-            self.bitset &= !(1 << value);
-            true
-        } else {
-            false
-        }
+    pub const fn remove(&mut self, value: u32) {
+        debug_assert!(value < Self::R);
+        debug_assert!(self.contains(value));
+        self.bitset &= !(1 << value);
     }
 
     /// How many possibilities
@@ -98,16 +91,6 @@ impl<const N: usize> Cell<N> {
     pub const fn len(self) -> usize {
         self.bitset.count_ones() as usize
     }
-
-    // pub fn debug_print(self) {
-    //     for v in 0..R {
-    //         if self.contains(v) {
-    //             print!("{:x}", v);
-    //         } else {
-    //             print!("_");
-    //         }
-    //     }
-    // }
 
     pub fn to_char(self) -> char {
         let Some(value) = self.get_value() else {
@@ -196,8 +179,8 @@ fn test_pop_random() {
     assert_eq!(empty.len(), 0);
     let mut rng = SmallRng::from_seed([145; 32]);
     while full.len() > 0 {
-        let value = full.get_random(&mut rng).unwrap();
-        full.pop(value);
+        let value = full.choose(&mut rng).unwrap();
+        full.remove(value);
         assert!(!empty.contains(value));
         empty |= Cell::from_value(value);
     }

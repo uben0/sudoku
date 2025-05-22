@@ -136,7 +136,9 @@ impl<const N: usize> Sudoku<N> {
     #[inline]
     #[must_use]
     fn place_number(&mut self, value: u32, pos: Pos) -> Option<usize> {
-        debug_assert!(self.grid[pos].contains(value));
+        if !self.grid[pos].contains(value) {
+            return None;
+        }
         let mut count = 0;
         for iv in self.grid[pos] {
             if iv != value && self.grid[pos].contains(iv) {
@@ -158,10 +160,13 @@ impl<const N: usize> Sudoku<N> {
     /// It may fail if the grid turns out to be inconsistent, in that case
     /// no moves are pushed and it returns `None`
     fn remove(&mut self, value: u32, pos: Pos) -> Option<usize> {
-        // TODO: why failing
-        if !self.grid[pos].remove(value) {
+        if !self.grid[pos].contains(value) {
             return None;
         }
+        if self.grid[pos].len() <= 1 {
+            return None;
+        }
+        self.grid[pos].remove(value);
         self.moves.push((value, pos));
         let mut count = 1; // we count the number of pushed moves
 
@@ -343,8 +348,8 @@ impl<const N: usize> Sudoku<N> {
         let (_, pos) = min?;
         // for each possibilities
         let mut available = self.grid[pos];
-        while let Some(value) = available.get_random(rng) {
-            available.pop(value);
+        while let Some(value) = available.choose(rng) {
+            available.remove(value);
             if let Some(mut result) = self.push_move((value, pos)) {
                 if let Some(found) = result.brute_force(tickets, rng) {
                     return Some(found);
@@ -404,7 +409,7 @@ impl SudokuAny {
             }
         }
     }
-    pub fn print(&self, writer: &mut impl Write) {
+    pub fn print(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
         match self {
             SudokuAny::Sudoku1(sudoku) => sudoku.print(writer),
             SudokuAny::Sudoku2(sudoku) => sudoku.print(writer),
@@ -437,7 +442,7 @@ impl<const N: usize> Default for Sudoku<N> {
 }
 
 impl FromStr for SudokuAny {
-    type Err = ();
+    type Err = LoadingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let n = s.chars().filter(|c| !c.is_whitespace()).count();
@@ -448,36 +453,54 @@ impl FromStr for SudokuAny {
             256 => Self::Sudoku4(s.parse()?),
             625 => Self::Sudoku5(s.parse()?),
             1296 => Self::Sudoku6(s.parse()?),
-            _ => panic!("invalid grid size {}", n),
+            _ => {
+                return Err(LoadingError::InvalidSize { received: n });
+            }
         })
     }
 }
 
+#[derive(Debug)]
+pub enum LoadingError {
+    InvalidSize {
+        received: usize,
+    },
+    Conflicting {
+        pos_x: usize,
+        pos_y: usize,
+        value: u32,
+    },
+}
+
 impl<const N: usize> FromStr for Sudoku<N> {
-    type Err = ();
+    type Err = LoadingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let cells: Vec<_> = s
+        let mut cells = s
             .chars()
             .filter(|c| !c.is_whitespace())
-            .map(Cell::<N>::from_char)
-            .collect();
-        // TODO: don't collect into Vec
-        assert_eq!(cells.len(), N * N * N * N);
+            .map(Cell::<N>::from_char);
         let mut game = Self::default();
-        let mut cells = cells.iter();
         for y_1 in 0..N as u8 {
             for y_2 in 0..N as u8 {
                 for x_1 in 0..N as u8 {
                     for x_2 in 0..N as u8 {
                         let pos = Pos { y_1, y_2, x_1, x_2 };
-                        if let Some(value) = cells.next().unwrap().get_value() {
+                        let Some(cell) = cells.next() else {
+                            return Err(LoadingError::InvalidSize {
+                                received: y_1 as usize * N * N * N
+                                    + y_2 as usize * N * N
+                                    + x_1 as usize * N
+                                    + x_2 as usize,
+                            });
+                        };
+                        if let Some(value) = cell.get_value() {
                             let Some(_) = game.place_number(value, pos) else {
-                                game.print(std::io::stdout());
-                                panic!(
-                                    "inconscistent grid value {:?} at [{}, {}, {}, {}]",
-                                    value, y_1, y_2, x_1, x_2
-                                );
+                                return Err(LoadingError::Conflicting {
+                                    pos_x: pos.x_1 as usize * N + pos.x_2 as usize,
+                                    pos_y: pos.y_1 as usize * N + pos.y_2 as usize,
+                                    value,
+                                });
                             };
                         }
                     }
@@ -507,7 +530,7 @@ impl<const N: usize> Game for Sudoku<N> {
         })
     }
 
-    fn print(&self, mut writer: impl Write) {
+    fn print(&self, mut writer: impl Write) -> Result<(), std::io::Error> {
         fn print_line_sep(
             mut writer: impl Write,
             n: usize,
@@ -516,46 +539,48 @@ impl<const N: usize> Game for Sudoku<N> {
             line: char,
             cross_thin: char,
             cross_bold: char,
-        ) {
+        ) -> Result<(), std::io::Error> {
             let nn = n * n;
-            write!(writer, "{left}{line}{line}{line}").unwrap();
+            write!(writer, "{left}{line}{line}{line}")?;
             for x in 1..nn {
                 if x % n == 0 {
-                    write!(writer, "{cross_bold}{line}{line}{line}").unwrap();
+                    write!(writer, "{cross_bold}{line}{line}{line}")?;
                 } else {
-                    write!(writer, "{cross_thin}{line}{line}{line}").unwrap();
+                    write!(writer, "{cross_thin}{line}{line}{line}")?;
                 }
             }
-            writeln!(writer, "{right}").unwrap();
+            writeln!(writer, "{right}")?;
+            Ok(())
         }
-        print_line_sep(&mut writer, N, '┏', '┓', '━', '┯', '┳');
+        print_line_sep(&mut writer, N, '┏', '┓', '━', '┯', '┳')?;
         for y_1 in 0..N {
             for y_2 in 0..N {
                 if y_1 > 0 || y_2 > 0 {
                     if y_2 == 0 {
-                        print_line_sep(&mut writer, N, '┣', '┫', '━', '┿', '╋');
+                        print_line_sep(&mut writer, N, '┣', '┫', '━', '┿', '╋')?;
                     } else {
-                        print_line_sep(&mut writer, N, '┠', '┨', '─', '┼', '╂');
+                        print_line_sep(&mut writer, N, '┠', '┨', '─', '┼', '╂')?;
                     }
                 }
                 for x_1 in 0..N {
                     for x_2 in 0..N {
                         if x_2 == 0 {
-                            write!(writer, "┃").unwrap();
+                            write!(writer, "┃")?;
                         } else {
-                            write!(writer, "│").unwrap();
+                            write!(writer, "│")?;
                         }
                         let c = match self.grid[y_1][y_2][x_1][x_2].to_char() {
                             '_' => ' ',
                             c => c,
                         };
-                        write!(writer, " {} ", c).unwrap();
+                        write!(writer, " {} ", c)?;
                     }
                 }
-                writeln!(writer, "┃").unwrap();
+                writeln!(writer, "┃")?;
             }
         }
-        print_line_sep(&mut writer, N, '┗', '┛', '━', '┷', '┻');
+        print_line_sep(&mut writer, N, '┗', '┛', '━', '┷', '┻')?;
+        Ok(())
     }
 
     // Because of the way moves are pushed, it enforces that the grid

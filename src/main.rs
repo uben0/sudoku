@@ -3,10 +3,11 @@ use std::{io::Write, path::PathBuf, time::Instant};
 mod cell;
 mod resulting;
 mod sudoku;
+use cell::Cell;
 use clap::Parser;
 use rand::{SeedableRng, rngs::SmallRng};
 use resulting::Resulting;
-use sudoku::SudokuAny;
+use sudoku::{LoadingError, SudokuAny};
 
 #[derive(clap::Parser)]
 struct Args {
@@ -32,17 +33,33 @@ fn main() {
             let mut rng = SmallRng::from_seed(seed_block);
             match command {
                 Command::Solve { input } => {
-                    let content = std::fs::read_to_string(input).unwrap();
-                    let mut sudoku: SudokuAny = content.parse().unwrap();
+                    let content = match std::fs::read_to_string(&input) {
+                        Ok(content) => content,
+                        Err(err) => {
+                            println!("Could not open {:?}: {}.", input, err);
+                            return;
+                        }
+                    };
+                    let mut sudoku: SudokuAny = match content.parse() {
+                        Ok(sudoku) => sudoku,
+                        Err(LoadingError::InvalidSize { received }) => {
+                            println!("Invalid grid size: Got {} but expected either 1, 16, 81, 256, 625 or 1296.", received);
+                            return;
+                        }
+                        Err(LoadingError::Conflicting { pos_x, pos_y, value }) => {
+                            println!("Conflicting value provided: Value {} is not valid at column {} and row {}.", Cell::<36>::from_value(value).to_char(), pos_x + 1, pos_y + 1);
+                            return;
+                        }
+                    };
                     if let Some(solved) = sudoku.brute_force(&mut 20_000, &mut rng) {
-                        solved.print(&mut std::io::stdout());
+                        solved.print(&mut std::io::stdout()).unwrap();
                     }
                 }
                 Command::Generate { size } => {
                     let start_time = Instant::now();
                     let sudoku = SudokuAny::generate(size, &mut rng);
                     let elapsed = start_time.elapsed();
-                    sudoku.print(&mut std::io::stdout());
+                    sudoku.print(&mut std::io::stdout()).unwrap();
                     println!("elapsed: {:?}", elapsed);
                 }
             }
@@ -61,7 +78,7 @@ pub trait Game {
     type RewindData;
 
     /// Prints a pretty representation of the instance.
-    fn print(&self, writer: impl Write);
+    fn print(&self, writer: impl Write) -> std::io::Result<()>;
 
     /// Is the game in a winning state.
     fn is_accepting(&self) -> bool;
