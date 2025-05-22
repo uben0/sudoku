@@ -27,16 +27,18 @@ Don't forget to run in `release` mode for instantaneous solving and generation.
 
 ## TODO
 
+- [ ] Investigate why stuck on solve `grid-6-a.txt` with `seed=8`
+- [ ] Investigate why recursion level is so high
 - [ ] Benchmark.
 - [x] Remove generic parameter `R`.
 - [x] Remove generic parameter `NN`.
 - [ ] Remove `Game` trait.
 - [x] Fix invalid moves being available.
-- [ ] Optimize.
+- [x] Optimize.
 - [ ] Maybe avoid recursion by using a stack.
 - [x] Better random choices.
 - [ ] Character mapping starting at 0.
-- [ ] Remove duplicated code.
+- [x] Remove duplicated code.
 - [ ] Simplify rewinder.
 - [ ] Wasm friendly.
-- [ ] Error handling
+- [x] Error handling

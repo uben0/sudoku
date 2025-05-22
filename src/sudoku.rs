@@ -186,52 +186,25 @@ impl<const N: usize> Sudoku<N> {
             if self.grid[ipos].len() == 1 {
                 continue;
             }
-            let unics = [
-                self.unic_on_row(ipos),
-                self.unic_on_column(ipos),
-                self.unic_on_square(ipos),
-            ];
-            for unic in unics {
-                // multiple forced values means incoherent grid
-                if unic.len() > 1 {
-                    self.pop_n_moves(count);
-                    return None;
-                }
+            // TODO: investigate optimisation when a value can't be placed anymore, to short-circuit search
+            let unic =
+                self.unic_on_row(ipos) | self.unic_on_column(ipos) | self.unic_on_square(ipos);
+
+            if unic.len() == 0 {
+                continue;
             }
-            // TODO: just merge the bitsets
-            // The line, the column and the square may all enforce a unic value
-            // We must check if it is the same, otherwise, it means the grid is incoherent
-            let unics = unics.map(Cell::get_value);
-            let mut iter = unics.into_iter().flatten();
-            let unic = match [iter.next(), iter.next(), iter.next()] {
-                [Some(a), Some(b), Some(c)] => {
-                    if a == b && a == c {
-                        Some(a)
-                    } else {
-                        self.pop_n_moves(count);
-                        return None;
-                    }
-                }
-                [Some(a), Some(b), _] => {
-                    if a == b {
-                        Some(a)
-                    } else {
-                        self.pop_n_moves(count);
-                        return None;
-                    }
-                }
-                [v, _, _] => v,
+            let Some(value) = unic.get_value() else {
+                self.pop_n_moves(count);
+                return None;
             };
-            // if there is an enforced value
-            if let Some(value) = unic {
-                // we remove all other possibilities
-                if let Some(n) = self.place_number(value, ipos) {
-                    count += n;
-                } else {
-                    // it may fail if the grid is incoherent
-                    self.pop_n_moves(count);
-                    return None;
-                }
+
+            // we remove all other possibilities
+            if let Some(n) = self.place_number(value, ipos) {
+                count += n;
+            } else {
+                // it may fail if the grid is incoherent
+                self.pop_n_moves(count);
+                return None;
             }
         });
         Some(count)
@@ -241,46 +214,58 @@ impl<const N: usize> Sudoku<N> {
     // which are not present in the other one of its line (row).
     // If there is more than one, its incoherent, it means there
     // is more than one enforced value.
+    #[must_use]
     fn unic_on_row(&self, pos: Pos) -> Cell<N> {
         let mut possibles = Cell::EMPTY;
         for x_1 in 0..N as u8 {
             for x_2 in 0..N as u8 {
                 if x_1 != pos.x_1 || x_2 != pos.x_2 {
                     possibles |= self.grid[Pos { x_1, x_2, ..pos }];
+                    // if possibles == Cell::FULL {
+                    //     return Cell::EMPTY;
+                    // }
                 }
             }
         }
-        !possibles & self.grid[pos]
+        !possibles
     }
     // For a given cell, returns all possibilities of the cell
     // which are not present in the other one of its column.
     // If there is more than one, its incoherent, it means there
     // is more than one enforced value.
+    #[must_use]
     fn unic_on_column(&self, pos: Pos) -> Cell<N> {
         let mut possibles = Cell::EMPTY;
         for y_1 in 0..N as u8 {
             for y_2 in 0..N as u8 {
                 if y_1 != pos.y_1 || y_2 != pos.y_2 {
                     possibles |= self.grid[Pos { y_1, y_2, ..pos }];
+                    // if possibles == Cell::FULL {
+                    //     return Cell::EMPTY;
+                    // }
                 }
             }
         }
-        !possibles & self.grid[pos]
+        !possibles
     }
     // For a given cell, returns all possibilities of the cell
     // which are not present in the other one of its square.
     // If there is more than one, its incoherent, it means there
     // is more than one enforced value.
+    #[must_use]
     fn unic_on_square(&self, pos: Pos) -> Cell<N> {
         let mut possibles = Cell::EMPTY;
         for y_2 in 0..N as u8 {
             for x_2 in 0..N as u8 {
                 if y_2 != pos.y_2 || x_2 != pos.x_2 {
                     possibles |= self.grid[Pos { y_2, x_2, ..pos }];
+                    // if possibles == Cell::FULL {
+                    //     return Cell::EMPTY;
+                    // }
                 }
             }
         }
-        !possibles & self.grid[pos]
+        !possibles
     }
 
     // pub fn debug_print(&self) {
