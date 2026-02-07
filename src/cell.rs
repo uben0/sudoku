@@ -99,6 +99,72 @@ impl<const N: usize> Cell<N> {
         self.bitset.count_ones() as usize
     }
 
+    pub const SYMBOLS: [char; 49] = [
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
+        'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0',
+        'Ψ', 'Ω', 'Φ', 'Δ', 'Ξ', 'Γ', 'Π', 'Σ', 'Д', 'Б', 'Џ', 'Ш', 'Ч',
+    ];
+
+    pub const fn from_char(c: char) -> Option<Self> {
+        Some(Self::from_value(match c {
+            '1' => 0,
+            '2' => 1,
+            '3' => 2,
+            '4' => 3,
+            '5' => 4,
+            '6' => 5,
+            '7' => 6,
+            '8' => 7,
+            '9' => 8,
+            'A' => 9,
+            'B' => 10,
+            'C' => 11,
+            'D' => 12,
+            'E' => 13,
+            'F' => 14,
+            'G' => 15,
+            'H' => 16,
+            'I' => 17,
+            'J' => 18,
+            'K' => 19,
+            'L' => 20,
+            'M' => 21,
+            'N' => 22,
+            'O' => 23,
+            'P' => 24,
+            'Q' => 25,
+            'R' => 26,
+            'S' => 27,
+            'T' => 28,
+            'U' => 29,
+            'V' => 30,
+            'W' => 31,
+            'X' => 32,
+            'Y' => 33,
+            'Z' => 34,
+            '0' => 35,
+            'Ψ' => 36,
+            'Ω' => 37,
+            'Φ' => 38,
+            'Δ' => 39,
+            'Ξ' => 40,
+            'Γ' => 41,
+            'Π' => 42,
+            'Σ' => 43,
+            'Д' => 44,
+            'Б' => 45,
+            'Џ' => 46,
+            'Ш' => 47,
+            'Ч' => 48,
+            '_' => {
+                return Some(Self::EMPTY);
+            }
+            _ => {
+                return None;
+            } // _ => panic!("invalid cell symbol {:?}, expecting alpha-numeric", c),
+        }))
+    }
+
     pub fn to_char(self) -> char {
         let Some(value) = self.get_value() else {
             return '_';
@@ -108,17 +174,8 @@ impl<const N: usize> Cell<N> {
         [
             '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
             'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y',
-            'Z', '0',
+            'Z', '0', 'Ψ', 'Ω', 'Φ', 'Δ', 'Ξ', 'Γ', 'Π', 'Σ', 'Д', 'Б', 'Џ', 'Ш', 'Ч',
         ][value as usize]
-    }
-    pub fn from_char(c: char) -> Self {
-        match c {
-            '1'..='9' => Self::from_value((c as u32 - '1' as u32) + 0),
-            'A'..='Z' => Self::from_value((c as u32 - 'A' as u32) + 9),
-            '0' => Self::from_value(35),
-            '_' => Self::FULL,
-            _ => panic!("invalid cell symbol {:?}, expecting alpha-numeric", c),
-        }
     }
 }
 

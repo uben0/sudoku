@@ -21,8 +21,14 @@ struct Args {
 
 #[derive(clap::Subcommand, Clone)]
 enum Command {
-    Solve { input: PathBuf },
-    Generate { size: u32 },
+    Solve {
+        input: PathBuf,
+    },
+    Generate {
+        size: u32,
+        #[arg(default_value_t = 100)]
+        retry: usize,
+    },
 }
 
 fn main() {
@@ -50,7 +56,7 @@ fn main() {
                 Ok(sudoku) => sudoku,
                 Err(LoadingError::InvalidSize { received }) => {
                     println!(
-                        "Invalid grid size: Got {} but expected either 1, 16, 81, 256, 625 or 1296.",
+                        "Invalid grid size: Got {} but expected either 1, 16, 81, 256, 625, 1296 or 2401.",
                         received
                     );
                     return;
@@ -68,8 +74,12 @@ fn main() {
                     );
                     return;
                 }
+                Err(LoadingError::InvalidCharacter { char }) => {
+                    println!("the character {char:?} is not valid for a cell value");
+                    return;
+                }
             };
-            if let Some(solved) = sudoku.brute_force(&mut rng) {
+            if let Some(solved) = sudoku.brute_force(&mut rng, 100) {
                 let elapsed = start_time.elapsed();
                 solved.print(&mut std::io::stdout()).unwrap();
 
@@ -78,13 +88,16 @@ fn main() {
                 }
             }
         }
-        Command::Generate { size } => {
+        Command::Generate { size, retry } => {
             let start_time = Instant::now();
-            let sudoku = SudokuAny::generate(size, &mut rng);
-            let elapsed = start_time.elapsed();
-            sudoku.print(&mut std::io::stdout()).unwrap();
-            if time {
-                println!("elapsed: {:?}", elapsed);
+            if let Some(sudoku) = SudokuAny::generate(size, &mut rng, retry) {
+                let elapsed = start_time.elapsed();
+                sudoku.print(&mut std::io::stdout()).unwrap();
+                if time {
+                    println!("elapsed: {:?}", elapsed);
+                }
+            } else {
+                println!("exhausted {retry} attempts without finding a solution");
             }
         }
     }
