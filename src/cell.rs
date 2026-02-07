@@ -161,7 +161,7 @@ impl<const N: usize> Cell<N> {
             }
             _ => {
                 return None;
-            } // _ => panic!("invalid cell symbol {:?}, expecting alpha-numeric", c),
+            }
         }))
     }
 
