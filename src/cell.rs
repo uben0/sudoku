@@ -1,4 +1,4 @@
-use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
+use std::ops::{BitAnd, BitOr, BitOrAssign, Not, Sub};
 
 use rand::Rng;
 
@@ -10,6 +10,12 @@ pub struct Cell<const N: usize> {
     /// `1` means could contain
     /// `0` means can't contain
     bitset: u64,
+}
+
+impl<const N: usize> Default for Cell<N> {
+    fn default() -> Self {
+        Self::EMPTY
+    }
 }
 
 // This is an implementation block.
@@ -26,6 +32,7 @@ impl<const N: usize> Cell<N> {
         bitset: !(!0 << Self::R),
     };
 
+    // TODO: try storing values as u8
     /// Only one specific value in that cell
     #[inline]
     #[must_use]
@@ -166,6 +173,14 @@ impl<const R: usize> Iterator for Cell<R> {
         let value = self.bitset.trailing_zeros();
         self.bitset = self.bitset & !(1 << value);
         Some(value)
+    }
+}
+
+impl<const N: usize> Sub<u32> for Cell<N> {
+    type Output = Self;
+
+    fn sub(self, rhs: u32) -> Self::Output {
+        self & !Self::from_value(rhs)
     }
 }
 

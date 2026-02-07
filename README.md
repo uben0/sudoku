@@ -27,8 +27,12 @@ Don't forget to run in `release` mode for instantaneous solving and generation.
 
 ## TODO
 
+- [ ] deterministic pre-fill, then remap values at end when option provided
+
 - [ ] Investigate why stuck on solve `grid-6-a.txt` with `seed=8`
 - [ ] Investigate why recursion level is so high
+  - use a hashmap to postpone function collapse
+  - instead of hashmap, combine a vec and a grid with booleans
 - [ ] Benchmark.
 - [x] Remove generic parameter `R`.
 - [x] Remove generic parameter `NN`.

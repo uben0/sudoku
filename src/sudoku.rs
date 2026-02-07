@@ -1,4 +1,8 @@
-use super::{Game, Resulting, cell::Cell};
+mod defer;
+
+use crate::sudoku::defer::Defer;
+
+use super::cell::Cell;
 use rand::{Rng, seq::SliceRandom};
 use std::{
     io::Write,
@@ -20,7 +24,7 @@ pub struct Sudoku<const N: usize> {
     moves: Vec<(u32, Pos)>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Pos {
     /// Selects the row chunk
     x_1: u8,
@@ -31,45 +35,52 @@ pub struct Pos {
     /// Selects the column line
     y_2: u8,
 }
+impl Pos {
+    pub fn iter<const N: usize>() -> impl Iterator<Item = Pos> {
+        gen {
+            for y_1 in 0..N as u8 {
+                for y_2 in 0..N as u8 {
+                    for x_1 in 0..N as u8 {
+                        for x_2 in 0..N as u8 {
+                            yield Pos { y_1, y_2, x_1, x_2 };
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
-// This is a macro, it is expanded at compile time. '$' means macro variable.
 // This allow to easily iterate over the correlated cells of one cell
 // We call correlated cells the one in the same line, column or square
-macro_rules! correlated_cells {
-    (
-        $n:expr, // The size of a square (N)
-        $pos:expr, // The targated cell
-        $ipos:ident, // The name of the variable succesively storing the correlated cell
-        { $($exec:tt)* } // The block of code to execute for each correlated cell
-    ) => {
-        // line (without square)
-        for x_1 in 0..$n {
-            if x_1 != $pos.x_1 {
-                for x_2 in 0..$n {
-                    let $ipos = Pos { x_1, x_2, ..$pos };
-                    $($exec)*
+fn correlated<const N: usize>(pos: Pos) -> impl Iterator<Item = Pos> {
+    gen move {
+        let n = N as u8;
+        // row (without square)
+        for x_1 in 0..n {
+            if x_1 != pos.x_1 {
+                for x_2 in 0..n {
+                    yield Pos { x_1, x_2, ..pos };
                 }
             }
         }
         // column (without square)
-        for y_1 in 0..$n {
-            if y_1 != $pos.y_1 {
-                for y_2 in 0..$n {
-                    let $ipos = Pos { y_1, y_2, ..$pos };
-                    $($exec)*
+        for y_1 in 0..n {
+            if y_1 != pos.y_1 {
+                for y_2 in 0..n {
+                    yield Pos { y_1, y_2, ..pos };
                 }
             }
         }
         // square (full)
-        for y_2 in 0..$n {
-            for x_2 in 0..$n {
-                if y_2 != $pos.y_2 || x_2 != $pos.x_2 {
-                    let $ipos = Pos { y_2, x_2, ..$pos };
-                    $($exec)*
+        for y_2 in 0..n {
+            for x_2 in 0..n {
+                if y_2 != pos.y_2 || x_2 != pos.x_2 {
+                    yield Pos { y_2, x_2, ..pos };
                 }
             }
         }
-    };
+    }
 }
 
 impl<const N: usize> Index<Pos> for [[[[Cell<N>; N]; N]; N]; N] {
@@ -90,6 +101,7 @@ impl<const N: usize> IndexMut<Pos> for [[[[Cell<N>; N]; N]; N]; N] {
 // Implementation of associated methods to Sudoku
 impl<const N: usize> Sudoku<N> {
     pub fn generate(rng: &mut impl Rng) -> Self {
+        let mut defer = Defer::<N>::new();
         loop {
             let mut grid = Self::default();
             let mut line: Vec<_> = (0..(N * N) as u32).collect();
@@ -104,6 +116,7 @@ impl<const N: usize> Sudoku<N> {
                             y_1: 0,
                             y_2: 0,
                         },
+                        &mut defer,
                     ) else {
                         unreachable!()
                     };
@@ -124,14 +137,14 @@ impl<const N: usize> Sudoku<N> {
     /// no move is pushed and it returns `None`
     #[inline]
     #[must_use]
-    fn place_number(&mut self, value: u32, pos: Pos) -> Option<usize> {
+    fn place_number(&mut self, value: u32, pos: Pos, defer: &mut Defer<N>) -> Option<usize> {
         if !self.grid[pos].contains(value) {
             return None;
         }
         let mut count = 0;
         for iv in self.grid[pos] {
             if iv != value && self.grid[pos].contains(iv) {
-                if let Some(n) = self.remove(iv, pos) {
+                if let Some(n) = self.remove(iv, pos, defer) {
                     count += n;
                 } else {
                     self.pop_n_moves(count);
@@ -142,73 +155,138 @@ impl<const N: usize> Sudoku<N> {
         Some(count)
     }
 
+    fn remove(&mut self, value: u32, pos: Pos, defer: &mut Defer<N>) -> Option<usize> {
+        defer.clear();
+        defer.push(value, pos);
+        let mut pushed = 0;
+
+        while let Some((value, pos)) = defer.pop() {
+            if !self.grid[pos].contains(value) {
+                continue;
+            }
+            if self.grid[pos].len() <= 1 {
+                self.pop_n_moves(pushed);
+                return None;
+            }
+
+            self.grid[pos].remove(value);
+            self.moves.push((value, pos));
+            pushed += 1;
+
+            // if the current cell has a unique possiblity
+            // all correlated cells can't have it
+            if let Some(value) = self.grid[pos].get_value() {
+                for pos in correlated::<N>(pos) {
+                    if self.grid[pos].contains(value) {
+                        defer.push(value, pos);
+                    }
+                }
+            }
+
+            // Now that we removed the `value` possibility of the cell `[y, x]`
+            // Maybe a correlated cell now is the only one with it in its correlated neigbourhood
+            // If it is the case, it become its only possibility, and we cascade the effect
+            for pos in correlated::<N>(pos) {
+                // A determine cell will always result in enforcing its value
+                // It is already unique, so we don't have to do anything
+                if self.grid[pos].len() == 1 {
+                    continue;
+                }
+                // TODO: investigate optimisation when a value can't be placed anymore, to short-circuit search
+                let unic =
+                    self.unic_on_row(pos) | self.unic_on_column(pos) | self.unic_on_square(pos);
+
+                if unic.len() == 0 {
+                    continue;
+                }
+
+                let Some(value) = unic.get_value() else {
+                    // more than one value is enforce in the cell, leading to incoherence
+                    self.pop_n_moves(pushed);
+                    return None;
+                };
+
+                if !self.grid[pos].contains(value) {
+                    self.pop_n_moves(pushed);
+                    return None;
+                }
+                for iv in self.grid[pos] {
+                    if iv != value && self.grid[pos].contains(iv) {
+                        defer.push(iv, pos);
+                    }
+                }
+            }
+        }
+        Some(pushed)
+    }
+
     /// Remove one possiblitity of a cell, with a cascading effect.
     ///
     /// The effect is recursively cascading on correlated cells.
     /// It returns the number of moves it has pushed.
     /// It may fail if the grid turns out to be inconsistent, in that case
     /// no moves are pushed and it returns `None`
-    fn remove(&mut self, value: u32, pos: Pos) -> Option<usize> {
-        if !self.grid[pos].contains(value) {
-            return None;
-        }
-        if self.grid[pos].len() <= 1 {
-            return None;
-        }
-        self.grid[pos].remove(value);
-        self.moves.push((value, pos));
-        let mut count = 1; // we count the number of pushed moves
+    // fn remove(&mut self, value: u32, pos: Pos) -> Option<usize> {
+    //     if !self.grid[pos].contains(value) {
+    //         return None;
+    //     }
+    //     if self.grid[pos].len() <= 1 {
+    //         return None;
+    //     }
+    //     self.grid[pos].remove(value);
+    //     self.moves.push((value, pos));
+    //     let mut count = 1; // we count the number of pushed moves
 
-        // if the current cell has a unique possiblity
-        // all correlated cells can't have it
-        if let Some(value) = self.grid[pos].get_value() {
-            correlated_cells!(N as u8, pos, ipos, {
-                if self.grid[ipos].contains(value) {
-                    if let Some(n) = self.remove(value, ipos) {
-                        count += n;
-                    } else {
-                        // cascading on a coherent grid should not fail
-                        // if it does, we know the grid is incoherent
-                        // we imediatelly buble up the error
-                        self.pop_n_moves(count);
-                        return None;
-                    }
-                }
-            });
-        }
+    //     // if the current cell has a unique possiblity
+    //     // all correlated cells can't have it
+    //     if let Some(value) = self.grid[pos].get_value() {
+    //         for pos in correlated::<N>(pos) {
+    //             if self.grid[pos].contains(value) {
+    //                 if let Some(n) = self.remove(value, pos) {
+    //                     count += n;
+    //                 } else {
+    //                     // cascading on a coherent grid should not fail
+    //                     // if it does, we know the grid is incoherent
+    //                     // we imediatelly buble up the error
+    //                     self.pop_n_moves(count);
+    //                     return None;
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        // Now that we removed the `value` possibility of the cell `[y, x]`
-        // Maybe a correlated cell now is the only one with it in its correlated neigbourhood
-        // If it is the case, it become its only possibility, and we cascade the effect
-        correlated_cells!(N as u8, pos, ipos, {
-            // A determine cell will always result in enforcing its value
-            // It is already unique, so we don't have to do anything
-            if self.grid[ipos].len() == 1 {
-                continue;
-            }
-            // TODO: investigate optimisation when a value can't be placed anymore, to short-circuit search
-            let unic =
-                self.unic_on_row(ipos) | self.unic_on_column(ipos) | self.unic_on_square(ipos);
+    //     // Now that we removed the `value` possibility of the cell `[y, x]`
+    //     // Maybe a correlated cell now is the only one with it in its correlated neigbourhood
+    //     // If it is the case, it become its only possibility, and we cascade the effect
+    //     for pos in correlated::<N>(pos) {
+    //         // A determine cell will always result in enforcing its value
+    //         // It is already unique, so we don't have to do anything
+    //         if self.grid[pos].len() == 1 {
+    //             continue;
+    //         }
+    //         // TODO: investigate optimisation when a value can't be placed anymore, to short-circuit search
+    //         let unic = self.unic_on_row(pos) | self.unic_on_column(pos) | self.unic_on_square(pos);
 
-            if unic.len() == 0 {
-                continue;
-            }
-            let Some(value) = unic.get_value() else {
-                self.pop_n_moves(count);
-                return None;
-            };
+    //         if unic.len() == 0 {
+    //             continue;
+    //         }
+    //         let Some(value) = unic.get_value() else {
+    //             self.pop_n_moves(count);
+    //             return None;
+    //         };
 
-            // we remove all other possibilities
-            if let Some(n) = self.place_number(value, ipos) {
-                count += n;
-            } else {
-                // it may fail if the grid is incoherent
-                self.pop_n_moves(count);
-                return None;
-            }
-        });
-        Some(count)
-    }
+    //         // we remove all other possibilities
+    //         if let Some(n) = self.place_number(value, pos) {
+    //             count += n;
+    //         } else {
+    //             // it may fail if the grid is incoherent
+    //             self.pop_n_moves(count);
+    //             return None;
+    //         }
+    //     }
+
+    //     Some(count)
+    // }
 
     // For a given cell, returns all possibilities of the cell
     // which are not present in the other one of its line (row).
@@ -219,12 +297,13 @@ impl<const N: usize> Sudoku<N> {
         let mut possibles = Cell::EMPTY;
         for x_1 in 0..N as u8 {
             for x_2 in 0..N as u8 {
+                // TODO: replace if by aritmetic filter
                 if x_1 != pos.x_1 || x_2 != pos.x_2 {
                     possibles |= self.grid[Pos { x_1, x_2, ..pos }];
-                    // if possibles == Cell::FULL {
-                    //     return Cell::EMPTY;
-                    // }
                 }
+            }
+            if possibles == Cell::FULL {
+                return Cell::EMPTY;
             }
         }
         !possibles
@@ -240,10 +319,10 @@ impl<const N: usize> Sudoku<N> {
             for y_2 in 0..N as u8 {
                 if y_1 != pos.y_1 || y_2 != pos.y_2 {
                     possibles |= self.grid[Pos { y_1, y_2, ..pos }];
-                    // if possibles == Cell::FULL {
-                    //     return Cell::EMPTY;
-                    // }
                 }
+            }
+            if possibles == Cell::FULL {
+                return Cell::EMPTY;
             }
         }
         !possibles
@@ -259,10 +338,10 @@ impl<const N: usize> Sudoku<N> {
             for x_2 in 0..N as u8 {
                 if y_2 != pos.y_2 || x_2 != pos.x_2 {
                     possibles |= self.grid[Pos { y_2, x_2, ..pos }];
-                    // if possibles == Cell::FULL {
-                    //     return Cell::EMPTY;
-                    // }
                 }
+            }
+            if possibles == Cell::FULL {
+                return Cell::EMPTY;
             }
         }
         !possibles
@@ -285,54 +364,76 @@ impl<const N: usize> Sudoku<N> {
             self.grid[pos] |= Cell::from_value(value);
         }
     }
+    fn best_pos_for_birfucation(&self) -> Option<Pos> {
+        // TODO: try collect more than one candidate for later use
+        let mut min = None;
+        for pos in Pos::iter::<N>() {
+            // how many possibilities
+            let len = self.grid[pos].len();
+            match (len, min) {
+                (0, _) => unreachable!(),
+                (1, _) => {}
+                // TODO: compare with or without shortcircuit
+                (2, _) => {
+                    return Some(pos);
+                }
+                // no previous minimum
+                (_, None) => {
+                    min = Some(pos);
+                }
+                // at least 3, compare to previous minimum
+                (_, Some(p)) if len < self.grid[p].len() => {
+                    min = Some(pos);
+                }
+                _ => {}
+            }
+        }
+        // if we found a cell
+        min
+    }
+
+    fn pop_defer(defer: &mut Cell<N>, rng: &mut impl Rng) -> Option<u32> {
+        let value = defer.choose(rng)?;
+        *defer = *defer - value;
+        Some(value)
+    }
+
+    // TODO: reuse buffer for remove2 to avoid allocation
     fn brute_force(&mut self, rng: &mut impl Rng) -> Option<Self> {
         if self.is_accepting() {
             return Some(self.clone());
         }
 
-        let mut min = None;
-        // for all cells
-        for y_1 in 0..N as u8 {
-            for y_2 in 0..N as u8 {
-                for x_1 in 0..N as u8 {
-                    for x_2 in 0..N as u8 {
-                        let pos = Pos { y_1, y_2, x_1, x_2 };
-                        // how many possibilities
-                        let len = self.grid[pos].len();
-                        match (len, min) {
-                            (0, _) => unreachable!(),
-                            (1, _) => {}
-                            // TODO: break loop when exactly 2
-                            // at least 2, no previous minimum
-                            (_, None) => {
-                                min = Some((len, pos));
-                            }
-                            // at least 2, compare to previous minimum
-                            (_, Some((v, _))) if len < v => {
-                                min = Some((len, pos));
-                            }
-                            _ => {}
-                        }
+        let mut pos = self.best_pos_for_birfucation()?;
+        let mut cell = self.grid[pos];
+
+        let mut pushed: Vec<usize> = Vec::from([]);
+        let mut defer: Vec<(Cell<N>, Pos)> = Vec::from([]);
+
+        let mut persist = Defer::<N>::new();
+
+        loop {
+            if let Some(value) = Self::pop_defer(&mut cell, rng) {
+                if let Some(moved) = self.place_number(value, pos, &mut persist) {
+                    if self.is_accepting() {
+                        return Some(self.clone());
                     }
+
+                    defer.push((cell, pos));
+                    pushed.push(moved);
+
+                    pos = self.best_pos_for_birfucation()?;
+                    cell = self.grid[pos];
                 }
+            } else {
+                let Some(unpush) = pushed.pop() else {
+                    // all possibilities explored
+                    return None;
+                };
+                self.pop_n_moves(unpush);
+                (cell, pos) = defer.pop().unwrap();
             }
         }
-        // if we found a cell
-        let (_, pos) = min?;
-        // for each possibilities
-        let mut available = self.grid[pos];
-        while let Some(value) = available.choose(rng) {
-            available.remove(value);
-            if let Some(mut result) = self.push_move((value, pos)) {
-                if let Some(found) = result.brute_force(rng) {
-                    return Some(found);
-                }
-            }
-        }
-        // for value in self.grid[pos] {
-        //     // push the move and call the callback function
-        // }
-        return None;
     }
     // pub fn save(&self, mut writer: impl Write) {
     //     for y_1 in 0..N {
@@ -348,6 +449,63 @@ impl<const N: usize> Sudoku<N> {
     //         writeln!(writer).unwrap();
     //     }
     // }
+    fn print(&self, mut writer: impl Write) -> Result<(), std::io::Error> {
+        fn print_line_sep(
+            mut writer: impl Write,
+            n: usize,
+            left: char,
+            right: char,
+            line: char,
+            cross_thin: char,
+            cross_bold: char,
+        ) -> Result<(), std::io::Error> {
+            let nn = n * n;
+            write!(writer, "{left}{line}{line}{line}")?;
+            for x in 1..nn {
+                if x % n == 0 {
+                    write!(writer, "{cross_bold}{line}{line}{line}")?;
+                } else {
+                    write!(writer, "{cross_thin}{line}{line}{line}")?;
+                }
+            }
+            writeln!(writer, "{right}")?;
+            Ok(())
+        }
+        print_line_sep(&mut writer, N, '┏', '┓', '━', '┯', '┳')?;
+        for y_1 in 0..N {
+            for y_2 in 0..N {
+                if y_1 > 0 || y_2 > 0 {
+                    if y_2 == 0 {
+                        print_line_sep(&mut writer, N, '┣', '┫', '━', '┿', '╋')?;
+                    } else {
+                        print_line_sep(&mut writer, N, '┠', '┨', '─', '┼', '╂')?;
+                    }
+                }
+                for x_1 in 0..N {
+                    for x_2 in 0..N {
+                        if x_2 == 0 {
+                            write!(writer, "┃")?;
+                        } else {
+                            write!(writer, "│")?;
+                        }
+                        let c = match self.grid[y_1][y_2][x_1][x_2].to_char() {
+                            '_' => ' ',
+                            c => c,
+                        };
+                        write!(writer, " {} ", c)?;
+                    }
+                }
+                writeln!(writer, "┃")?;
+            }
+        }
+        print_line_sep(&mut writer, N, '┗', '┛', '━', '┷', '┻')?;
+        Ok(())
+    }
+    // Because of the way moves are pushed, it enforces that the grid
+    // remains coherent. We only have to check how many moves were pushed.
+    fn is_accepting(&self) -> bool {
+        self.moves.len() == N * N * N * N * (N * N - 1)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -442,112 +600,22 @@ impl<const N: usize> FromStr for Sudoku<N> {
             .filter(|c| !c.is_whitespace())
             .map(Cell::<N>::from_char);
         let mut game = Self::default();
-        for y_1 in 0..N as u8 {
-            for y_2 in 0..N as u8 {
-                for x_1 in 0..N as u8 {
-                    for x_2 in 0..N as u8 {
-                        let pos = Pos { y_1, y_2, x_1, x_2 };
-                        let Some(cell) = cells.next() else {
-                            return Err(LoadingError::InvalidSize {
-                                received: y_1 as usize * N * N * N
-                                    + y_2 as usize * N * N
-                                    + x_1 as usize * N
-                                    + x_2 as usize,
-                            });
-                        };
-                        if let Some(value) = cell.get_value() {
-                            let Some(_) = game.place_number(value, pos) else {
-                                return Err(LoadingError::Conflicting {
-                                    pos_x: pos.x_1 as usize * N + pos.x_2 as usize,
-                                    pos_y: pos.y_1 as usize * N + pos.y_2 as usize,
-                                    value,
-                                });
-                            };
-                        }
-                    }
-                }
+        let mut persist = Defer::<N>::new();
+        for (i, pos) in Pos::iter::<N>().enumerate() {
+            let Some(cell) = cells.next() else {
+                return Err(LoadingError::InvalidSize { received: i });
+            };
+            if let Some(value) = cell.get_value() {
+                let Some(_) = game.place_number(value, pos, &mut persist) else {
+                    return Err(LoadingError::Conflicting {
+                        pos_x: pos.x_1 as usize * N + pos.x_2 as usize,
+                        pos_y: pos.y_1 as usize * N + pos.y_2 as usize,
+                        value,
+                    });
+                };
             }
         }
         Ok(game)
-    }
-}
-fn rewind<const N: usize>(game: &mut Sudoku<N>, n: &usize) {
-    game.pop_n_moves(*n);
-}
-
-// The Sudoku struct implements the Game trait (interface)
-impl<const N: usize> Game for Sudoku<N> {
-    // The removed possiblity at given coords
-    type Move = (u32, Pos);
-    // The number of moves to pop
-    type RewindData = usize;
-
-    fn push_move(&mut self, (value, pos): Self::Move) -> Option<Resulting<Self, usize>> {
-        let count = self.remove(value, pos)?;
-        Some(Resulting {
-            game: self,
-            data: count,
-            rewind,
-        })
-    }
-
-    fn print(&self, mut writer: impl Write) -> Result<(), std::io::Error> {
-        fn print_line_sep(
-            mut writer: impl Write,
-            n: usize,
-            left: char,
-            right: char,
-            line: char,
-            cross_thin: char,
-            cross_bold: char,
-        ) -> Result<(), std::io::Error> {
-            let nn = n * n;
-            write!(writer, "{left}{line}{line}{line}")?;
-            for x in 1..nn {
-                if x % n == 0 {
-                    write!(writer, "{cross_bold}{line}{line}{line}")?;
-                } else {
-                    write!(writer, "{cross_thin}{line}{line}{line}")?;
-                }
-            }
-            writeln!(writer, "{right}")?;
-            Ok(())
-        }
-        print_line_sep(&mut writer, N, '┏', '┓', '━', '┯', '┳')?;
-        for y_1 in 0..N {
-            for y_2 in 0..N {
-                if y_1 > 0 || y_2 > 0 {
-                    if y_2 == 0 {
-                        print_line_sep(&mut writer, N, '┣', '┫', '━', '┿', '╋')?;
-                    } else {
-                        print_line_sep(&mut writer, N, '┠', '┨', '─', '┼', '╂')?;
-                    }
-                }
-                for x_1 in 0..N {
-                    for x_2 in 0..N {
-                        if x_2 == 0 {
-                            write!(writer, "┃")?;
-                        } else {
-                            write!(writer, "│")?;
-                        }
-                        let c = match self.grid[y_1][y_2][x_1][x_2].to_char() {
-                            '_' => ' ',
-                            c => c,
-                        };
-                        write!(writer, " {} ", c)?;
-                    }
-                }
-                writeln!(writer, "┃")?;
-            }
-        }
-        print_line_sep(&mut writer, N, '┗', '┛', '━', '┷', '┻')?;
-        Ok(())
-    }
-
-    // Because of the way moves are pushed, it enforces that the grid
-    // remains coherent. We only have to check how many moves were pushed.
-    fn is_accepting(&self) -> bool {
-        self.moves.len() == N * N * N * N * (N * N - 1)
     }
 }
 
