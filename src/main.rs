@@ -38,7 +38,6 @@ fn main() {
         time,
     } = Args::parse();
     let seed = seed.unwrap_or_else(|| rand::random());
-    println!("seed: {seed}");
     let mut seed_block = [0; 32];
     seed_block[0..16].copy_from_slice(&seed.to_be_bytes());
     let mut rng = SmallRng::from_seed(seed_block);

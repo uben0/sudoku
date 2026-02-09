@@ -449,6 +449,7 @@ pub enum SudokuAny {
     Sudoku5(Sudoku<5>),
     Sudoku6(Sudoku<6>),
     Sudoku7(Sudoku<7>),
+    Sudoku8(Sudoku<8>),
 }
 impl SudokuAny {
     pub fn brute_force(&mut self, rng: &mut impl Rng, retry: usize) -> Option<Self> {
@@ -474,6 +475,9 @@ impl SudokuAny {
             SudokuAny::Sudoku7(sudoku) => {
                 (sudoku.brute_force_retry(rng, retry)).map(SudokuAny::Sudoku7)
             }
+            SudokuAny::Sudoku8(sudoku) => {
+                (sudoku.brute_force_retry(rng, retry)).map(SudokuAny::Sudoku8)
+            }
         }
     }
     pub fn print(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
@@ -485,6 +489,7 @@ impl SudokuAny {
             SudokuAny::Sudoku5(sudoku) => sudoku.print(writer),
             SudokuAny::Sudoku6(sudoku) => sudoku.print(writer),
             SudokuAny::Sudoku7(sudoku) => sudoku.print(writer),
+            SudokuAny::Sudoku8(sudoku) => sudoku.print(writer),
         }
     }
     pub fn generate(size: u32, rng: &mut impl Rng, retry: usize) -> Option<Self> {
@@ -496,6 +501,7 @@ impl SudokuAny {
             5 => Self::Sudoku5(Sudoku::generate(rng, retry)?),
             6 => Self::Sudoku6(Sudoku::generate(rng, retry)?),
             7 => Self::Sudoku7(Sudoku::generate(rng, retry)?),
+            8 => Self::Sudoku8(Sudoku::generate(rng, retry)?),
             _ => panic!("invalid sudoku size"),
         })
     }
@@ -523,6 +529,7 @@ impl FromStr for SudokuAny {
             625 => Self::Sudoku5(s.parse()?),
             1296 => Self::Sudoku6(s.parse()?),
             2401 => Self::Sudoku7(s.parse()?),
+            4096 => Self::Sudoku8(s.parse()?),
             _ => {
                 return Err(LoadingError::InvalidSize { received: n });
             }

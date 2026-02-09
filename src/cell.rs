@@ -29,8 +29,13 @@ impl<const N: usize> Cell<N> {
 
     /// All possible number in that cell
     pub const FULL: Self = Self {
-        bitset: !(!0 << Self::R),
+        bitset: !(!0u64).unbounded_shl(Self::R),
+        // bitset: !(!0 << Self::R),
     };
+
+    pub const fn bitset(self) -> u64 {
+        self.bitset
+    }
 
     // TODO: try storing values as u8
     /// Only one specific value in that cell
@@ -99,10 +104,11 @@ impl<const N: usize> Cell<N> {
         self.bitset.count_ones() as usize
     }
 
-    pub const SYMBOLS: [char; 49] = [
+    pub const SYMBOLS: [char; 64] = [
         '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
         'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0',
-        'Ψ', 'Ω', 'Φ', 'Δ', 'Ξ', 'Γ', 'Π', 'Σ', 'Д', 'Б', 'Џ', 'Ш', 'Ч',
+        'Ψ', 'Ω', 'Φ', 'Δ', 'Ξ', 'Γ', 'Π', 'Σ', 'Д', 'Б', 'Џ', 'Ш', 'Ч', 'ก', 'ข', 'ค', 'ฉ', 'ช',
+        'ง', 'ด', 'ฮ', 'ล', 'ห', 'น', 'ฯ', 'ร', 'ฆ', 'พ',
     ];
 
     pub const fn from_char(c: char) -> Option<Self> {
@@ -156,6 +162,21 @@ impl<const N: usize> Cell<N> {
             'Џ' => 46,
             'Ш' => 47,
             'Ч' => 48,
+            'ก' => 49,
+            'ข' => 50,
+            'ค' => 51,
+            'ฉ' => 52,
+            'ช' => 53,
+            'ง' => 54,
+            'ด' => 55,
+            'ฮ' => 56,
+            'ล' => 57,
+            'ห' => 58,
+            'น' => 59,
+            'ฯ' => 60,
+            'ร' => 61,
+            'ฆ' => 62,
+            'พ' => 63,
             '_' => {
                 return Some(Self::EMPTY);
             }
@@ -170,12 +191,17 @@ impl<const N: usize> Cell<N> {
             return '_';
         };
         debug_assert!(value < Self::R);
-        // TODO: move 0 to first place, and remove limit on cell values
-        [
-            '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-            'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y',
-            'Z', '0', 'Ψ', 'Ω', 'Φ', 'Δ', 'Ξ', 'Γ', 'Π', 'Σ', 'Д', 'Б', 'Џ', 'Ш', 'Ч',
-        ][value as usize]
+        Self::SYMBOLS[value as usize]
+    }
+}
+
+#[test]
+fn test_char_mapping() {
+    for (value, char) in Cell::<8>::SYMBOLS.into_iter().enumerate() {
+        assert_eq!(
+            Cell::<8>::from_char(char),
+            Some(Cell::<8>::from_value(value as u32))
+        );
     }
 }
 
@@ -258,4 +284,40 @@ fn test_pop_random() {
     }
     assert_eq!(full.len(), 0);
     assert_eq!(empty.len(), 25);
+}
+
+#[test]
+fn full_cell() {
+    assert_eq!(
+        Cell::<1>::FULL.bitset,
+        0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001
+    );
+    assert_eq!(
+        Cell::<2>::FULL.bitset,
+        0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_1111
+    );
+    assert_eq!(
+        Cell::<3>::FULL.bitset,
+        0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001_1111_1111
+    );
+    assert_eq!(
+        Cell::<4>::FULL.bitset,
+        0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_1111_1111_1111_1111
+    );
+    assert_eq!(
+        Cell::<5>::FULL.bitset,
+        0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0001_1111_1111_1111_1111_1111_1111
+    );
+    assert_eq!(
+        Cell::<6>::FULL.bitset,
+        0b0000_0000_0000_0000_0000_0000_0000_1111_1111_1111_1111_1111_1111_1111_1111_1111
+    );
+    assert_eq!(
+        Cell::<7>::FULL.bitset,
+        0b0000_0000_0000_0001_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111
+    );
+    assert_eq!(
+        Cell::<8>::FULL.bitset,
+        0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111
+    );
 }
