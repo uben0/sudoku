@@ -28,12 +28,12 @@ impl<const N: usize> Defer<N> {
     }
 }
 
-impl<const N: usize, I: IntoIterator<Item = (u32, Pos)>> From<I> for Defer<N> {
-    fn from(iter: I) -> Self {
-        let mut defer = Self::new();
-        for (value, pos) in iter {
-            defer.push(value, pos);
-        }
-        defer
-    }
-}
+// impl<const N: usize> FromIterator<(u32, Pos)> for Defer<N> {
+//     fn from_iter<T: IntoIterator<Item = (u32, Pos)>>(iter: T) -> Self {
+//         let mut defer = Self::new();
+//         for (value, pos) in iter {
+//             defer.push(value, pos);
+//         }
+//         defer
+//     }
+// }

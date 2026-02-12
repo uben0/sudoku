@@ -99,7 +99,7 @@ impl<const N: usize> IndexMut<Pos> for [[[[Cell<N>; N]; N]; N]; N] {
 
 // Implementation of associated methods to Sudoku
 impl<const N: usize> Sudoku<N> {
-    pub const TTL: u32 = (1 << N) * 20;
+    pub const TTL: u32 = 1 << (N + 5);
     pub fn generate(rng: &mut impl Rng, retry: usize) -> Option<Self> {
         let mut defer = Defer::<N>::new();
         let mut grid = Self::default();
@@ -150,15 +150,21 @@ impl<const N: usize> Sudoku<N> {
     }
 
     fn remove(&mut self, value: u32, pos: Pos, defer: &mut Defer<N>) -> Option<usize> {
+        if !self.grid[pos].contains(value) {
+            return Some(0);
+        }
+        // TODO: init defer with the current grid, or use the game's grid directly
         defer.clear();
         defer.push(value, pos);
         let mut pushed = 0;
 
         while let Some((value, pos)) = defer.pop() {
+            // TODO: the defer object should prevent this case
             if !self.grid[pos].contains(value) {
+                println!("hoho");
                 continue;
             }
-            if self.grid[pos].len() <= 1 {
+            if self.grid[pos] == Cell::from_value(value) {
                 self.pop_n_moves(pushed);
                 return None;
             }
