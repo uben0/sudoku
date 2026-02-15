@@ -1,0 +1,13 @@
+[package]
+name = "sudoku-web"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rand = { version = "0.10.0", default-features = false }
+
+[profile.release]
+opt-level = "s"

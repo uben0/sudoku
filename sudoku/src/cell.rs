@@ -1,6 +1,12 @@
+use rand::{Rng, RngExt};
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not, Sub};
 
-use rand::Rng;
+pub const SYMBOLS: [char; 64] = [
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+    'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', 'Ψ', 'Ω',
+    'Φ', 'Δ', 'Ξ', 'Γ', 'Π', 'Σ', 'Д', 'Б', 'Џ', 'Ш', 'Ч', 'ก', 'ข', 'ค', 'ฉ', 'ช', 'ง', 'ด', 'ฮ',
+    'ล', 'ห', 'น', 'ฯ', 'ร', 'ฆ', 'พ',
+];
 
 /// Represents the content of one cell of the grid
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +63,21 @@ impl<const N: usize> Cell<N> {
         }
     }
 
+    pub fn first(self) -> Option<u32> {
+        let value = self.bitset.trailing_zeros();
+        if value < (N * N) as u32 {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn pop_first(&mut self) -> Option<u32> {
+        let value = self.first()?;
+        *self = *self - value;
+        Some(value)
+    }
+
     #[inline]
     #[must_use]
     pub fn choose(self, rng: &mut impl Rng) -> Option<u32> {
@@ -95,6 +116,7 @@ impl<const N: usize> Cell<N> {
         debug_assert!(value < Self::R);
         debug_assert!(self.contains(value));
         self.bitset &= !(1 << value);
+        // debug_assert!(self.len() > 0);
     }
 
     /// How many possibilities
@@ -103,13 +125,6 @@ impl<const N: usize> Cell<N> {
     pub const fn len(self) -> usize {
         self.bitset.count_ones() as usize
     }
-
-    pub const SYMBOLS: [char; 64] = [
-        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
-        'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0',
-        'Ψ', 'Ω', 'Φ', 'Δ', 'Ξ', 'Γ', 'Π', 'Σ', 'Д', 'Б', 'Џ', 'Ш', 'Ч', 'ก', 'ข', 'ค', 'ฉ', 'ช',
-        'ง', 'ด', 'ฮ', 'ล', 'ห', 'น', 'ฯ', 'ร', 'ฆ', 'พ',
-    ];
 
     pub const fn from_char(c: char) -> Option<Self> {
         Some(Self::from_value(match c {
@@ -178,7 +193,7 @@ impl<const N: usize> Cell<N> {
             'ฆ' => 62,
             'พ' => 63,
             '_' => {
-                return Some(Self::EMPTY);
+                return Some(Self::FULL);
             }
             _ => {
                 return None;
@@ -191,13 +206,13 @@ impl<const N: usize> Cell<N> {
             return '_';
         };
         debug_assert!(value < Self::R);
-        Self::SYMBOLS[value as usize]
+        SYMBOLS[value as usize]
     }
 }
 
 #[test]
 fn test_char_mapping() {
-    for (value, char) in Cell::<8>::SYMBOLS.into_iter().enumerate() {
+    for (value, char) in SYMBOLS.into_iter().enumerate() {
         assert_eq!(
             Cell::<8>::from_char(char),
             Some(Cell::<8>::from_value(value as u32))

@@ -1,9 +1,12 @@
-[package]
-name = "sudoku"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "3"
+members = ["sudoku", "sudoku-cli", "sudoku-web"]
 
-[dependencies]
-clap = { version = "4.5.38", features = ["derive"] }
-rand = "0.9.1"
-tinyvec = "1.9.0"
+[workspace.dependencies]
+rand = { version = "0.10.0", default-features = false, features = ["std", "std_rng", "thread_rng"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+overflow-checks = false

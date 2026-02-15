@@ -1,0 +1,9 @@
+[package]
+name = "sudoku"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.38", features = ["derive"] }
+rand = { workspace = true }
+tinyvec = "1.9.0"
