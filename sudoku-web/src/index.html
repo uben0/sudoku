@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Hello Wasm</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <select name="grid-size" id="grid-size">
+    <option value="0">0x0</option>
+    <option value="1">1x1</option>
+    <option value="2">4x4</option>
+    <option value="3">9x9</option>
+    <option value="4">16x16</option>
+    <option value="5">25x25</option>
+    <option value="6">36x36</option>
+    <option value="7">49x49</option>
+    <option value="8">64x64</option>
+  </select>
+  <input type="number" step="1" id="seed" min="0" max="999999999" placeholder="random" />
+  <button type="button" id="gen-button" disabled>generate</button>
+  <p id="status"></p>
+  <div id="grid-container"></div>
+  <script src="index.js"></script>
+</body>
+
+</html>

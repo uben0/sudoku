@@ -22,9 +22,10 @@
             (
               rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
                 extensions = [ "rust-src" "rust-analyzer" ];
-                targets = [ "arm-unknown-linux-gnueabihf" ];
+                targets = [ "x86_64-unknown-linux-gnu" "wasm32-unknown-unknown" ];
               })
             )
+            wasm-tools
           ];
 
           shellHook = ''exec ${pkgs.fish}/bin/fish'';

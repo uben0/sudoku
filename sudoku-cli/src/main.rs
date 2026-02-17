@@ -1,6 +1,6 @@
 use clap::Parser;
 use std::{collections::HashSet, path::PathBuf, time::Instant};
-use sudoku::{Cell, ChooseAtRandom, ChooseFirst, Defer, Pos, SYMBOLS, Sudoku};
+use sudoku::{Cell, ChooseAtRandom, ChooseFirst, Defer, Pos, Sudoku, char_to_value};
 
 #[derive(clap::Parser)]
 struct Args {
@@ -44,10 +44,15 @@ fn main() {
                     return;
                 }
             };
-            let charset = HashSet::from(SYMBOLS);
-            let content: Vec<char> = content
+            let content: Vec<Option<u32>> = content
                 .chars()
-                .filter(|c| *c == '_' || charset.contains(&c))
+                .flat_map(|c| {
+                    if c == '_' {
+                        Some(None)
+                    } else {
+                        char_to_value(c).map(Some)
+                    }
+                })
                 .collect();
             match content.len() {
                 GRID_SIZE_0 => solve::<0, GRID_SIZE_0>(seed, retry, content.try_into().unwrap()),
@@ -99,14 +104,14 @@ fn generate<const N: usize>(seed: u32, retry: usize) {
     println!("exhausted {retry} attempts without finding a solution");
 }
 
-fn solve<const N: usize, const L: usize>(seed: u32, retry: usize, symbols: [char; L]) {
+fn solve<const N: usize, const L: usize>(seed: u32, retry: usize, values: [Option<u32>; L]) {
     assert_eq!(N * N * N * N, L);
     let mut grid = Sudoku::<N>::default();
     let mut defer = Defer::new();
-    for ((i, pos), symbol) in Pos::iter::<N>().enumerate().zip(symbols) {
-        let Some(cell) = Cell::<N>::from_char(symbol) else {
-            eprintln!("invalid symbol {symbol:?}");
-            return;
+    for (pos, value) in Pos::iter::<N>().zip(values) {
+        let cell = match value {
+            Some(value) => Cell::from_value(value),
+            None => Cell::FULL,
         };
         let Some(_) = grid.remove_all(!cell, pos, &mut defer) else {
             eprintln!("conflicting value");

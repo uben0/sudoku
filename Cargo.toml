@@ -3,7 +3,7 @@ resolver = "3"
 members = ["sudoku", "sudoku-cli", "sudoku-web"]
 
 [workspace.dependencies]
-rand = { version = "0.10.0", default-features = false, features = ["std", "std_rng", "thread_rng"] }
+rand = { version = "0.10.0", default-features = false }
 
 [profile.release]
 opt-level = 3

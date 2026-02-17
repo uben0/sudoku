@@ -1,11 +1,12 @@
 #![feature(gen_blocks)]
 
 mod cell;
+mod charset;
 mod defer;
 mod grid;
 
 pub use cell::Cell;
-pub use cell::SYMBOLS;
+pub use charset::{char_to_value, value_to_char, value_to_char_width};
 pub use defer::Defer;
 pub use grid::Sudoku;
 use rand::prelude::*;
@@ -301,11 +302,23 @@ impl<const N: usize> Sudoku<N> {
                         } else {
                             write!(writer, "│")?;
                         }
-                        let c = match self[Pos { y_1, y_2, x_1, x_2 }].to_char() {
-                            '_' => ' ',
-                            c => c,
+                        match self[Pos { y_1, y_2, x_1, x_2 }].get_value() {
+                            None => {
+                                write!(writer, "   ")?;
+                            }
+                            Some(value) => {
+                                let c = value_to_char(value).unwrap();
+                                match value_to_char_width(value).unwrap() {
+                                    1 => {
+                                        write!(writer, " {c} ")?;
+                                    }
+                                    2 => {
+                                        write!(writer, " {c}")?;
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            }
                         };
-                        write!(writer, " {} ", c)?;
                     }
                 }
                 writeln!(writer, "┃")?;

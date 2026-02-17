@@ -1,13 +1,6 @@
 use rand::{Rng, RngExt};
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not, Sub};
 
-pub const SYMBOLS: [char; 64] = [
-    '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-    'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', 'Ψ', 'Ω',
-    'Φ', 'Δ', 'Ξ', 'Γ', 'Π', 'Σ', 'Д', 'Б', 'Џ', 'Ш', 'Ч', 'ก', 'ข', 'ค', 'ฉ', 'ช', 'ง', 'ด', 'ฮ',
-    'ล', 'ห', 'น', 'ฯ', 'ร', 'ฆ', 'พ',
-];
-
 /// Represents the content of one cell of the grid
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell<const N: usize> {
@@ -199,24 +192,6 @@ impl<const N: usize> Cell<N> {
                 return None;
             }
         }))
-    }
-
-    pub fn to_char(self) -> char {
-        let Some(value) = self.get_value() else {
-            return '_';
-        };
-        debug_assert!(value < Self::R);
-        SYMBOLS[value as usize]
-    }
-}
-
-#[test]
-fn test_char_mapping() {
-    for (value, char) in SYMBOLS.into_iter().enumerate() {
-        assert_eq!(
-            Cell::<8>::from_char(char),
-            Some(Cell::<8>::from_value(value as u32))
-        );
     }
 }
 
