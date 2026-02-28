@@ -30,13 +30,32 @@ pub struct Pos {
 
 impl<const N: usize> Sudoku<N> {
     pub const TTL: usize = 1 << (N + 5);
-    pub fn encode_grid(&self, dst: &mut [u8]) {
+    pub fn encode_grid(&self, dst: &mut [u8], mask: [[[[bool; N]; N]; N]; N]) {
         assert!(dst.len() >= N * N * N * N);
         let mut i = 0;
         for pos in Pos::iter::<N>() {
-            dst[i] = self[pos].get_value().map(|v| v as u8).unwrap_or(255);
+            dst[i] = mask[pos]
+                .then_some(self[pos])
+                .and_then(|c| c.get_value())
+                .map(|v| v as u8)
+                .unwrap_or(255);
             i += 1;
         }
+    }
+    pub fn decode_grid(src: &[u8]) -> Option<Self> {
+        assert!(src.len() >= N * N * N * N);
+        let mut defer = Defer::new();
+        let mut grid = Self::default();
+        let mut i = 0;
+        for pos in Pos::iter::<N>() {
+            let cell = match src[i] {
+                255 => Cell::FULL,
+                value => Cell::from_value(value as u32),
+            };
+            grid.remove_all(!cell, pos, &mut defer)?;
+            i += 1;
+        }
+        Some(grid)
     }
     fn remove(&mut self, value: u32, pos: Pos, defer: &mut Defer<N>) -> Option<usize> {
         debug_assert!(self[pos].contains(value));
@@ -263,7 +282,11 @@ impl<const N: usize> Sudoku<N> {
         min
     }
 
-    pub fn print(&self, mut writer: impl Write) -> Result<(), std::io::Error> {
+    pub fn print(
+        &self,
+        mut writer: impl Write,
+        mask: [[[[bool; N]; N]; N]; N],
+    ) -> Result<(), std::io::Error> {
         fn print_line_sep(
             mut writer: impl Write,
             n: usize,
@@ -302,7 +325,12 @@ impl<const N: usize> Sudoku<N> {
                         } else {
                             write!(writer, "│")?;
                         }
-                        match self[Pos { y_1, y_2, x_1, x_2 }].get_value() {
+                        let pos = Pos { y_1, y_2, x_1, x_2 };
+
+                        match Some(pos)
+                            .filter(|p| mask[*p])
+                            .and_then(|p| self[p].get_value())
+                        {
                             None => {
                                 write!(writer, "   ")?;
                             }
@@ -327,6 +355,22 @@ impl<const N: usize> Sudoku<N> {
         print_line_sep(&mut writer, N, '┗', '┛', '━', '┷', '┻')?;
         Ok(())
     }
+
+    pub fn obfuscate(&self, mut rng: impl Rng) -> [[[[bool; N]; N]; N]; N] {
+        let mut positions: Vec<Pos> = Pos::iter::<N>().collect();
+        let mut mask = [[[[false; N]; N]; N]; N];
+        positions.shuffle(&mut rng);
+        let mut obfuscated = Self::default();
+        let mut defer = Defer::new();
+        while let Some(pos) = positions.pop() {
+            mask[pos] = true;
+            obfuscated.remove_all(!self[pos], pos, &mut defer).unwrap();
+            if obfuscated.is_accepting() {
+                return mask;
+            }
+        }
+        panic!();
+    }
 }
 
 impl Pos {
@@ -341,178 +385,6 @@ impl Pos {
                     }
                 }
             }
-        }
-    }
-    pub fn swap(self, swap: u8) -> Self {
-        let Self { x_1, x_2, y_1, y_2 } = self;
-        match swap {
-            0 => Self {
-                x_1: x_1,
-                x_2: x_2,
-                y_1: y_1,
-                y_2: y_2,
-            },
-            1 => Self {
-                x_1: x_1,
-                x_2: x_2,
-                y_1: y_2,
-                y_2: y_1,
-            },
-            2 => Self {
-                x_1: x_1,
-                x_2: y_1,
-                y_1: x_2,
-                y_2: y_2,
-            },
-            3 => Self {
-                x_1: x_1,
-                x_2: y_1,
-                y_1: y_2,
-                y_2: x_2,
-            },
-            4 => Self {
-                x_1: x_1,
-                x_2: y_2,
-                y_1: x_2,
-                y_2: y_1,
-            },
-            5 => Self {
-                x_1: x_1,
-                x_2: y_2,
-                y_1: y_1,
-                y_2: x_2,
-            },
-            6 => Self {
-                x_1: x_2,
-                x_2: x_1,
-                y_1: y_1,
-                y_2: y_2,
-            },
-            7 => Self {
-                x_1: x_2,
-                x_2: x_1,
-                y_1: y_2,
-                y_2: y_1,
-            },
-            8 => Self {
-                x_1: x_2,
-                x_2: y_1,
-                y_1: x_1,
-                y_2: y_2,
-            },
-            9 => Self {
-                x_1: x_2,
-                x_2: y_1,
-                y_1: y_2,
-                y_2: x_1,
-            },
-            10 => Self {
-                x_1: x_2,
-                x_2: y_2,
-                y_1: x_1,
-                y_2: y_1,
-            },
-            11 => Self {
-                x_1: x_2,
-                x_2: y_2,
-                y_1: y_1,
-                y_2: x_1,
-            },
-            12 => Self {
-                x_1: y_1,
-                x_2: x_1,
-                y_1: x_2,
-                y_2: y_2,
-            },
-            13 => Self {
-                x_1: y_1,
-                x_2: x_1,
-                y_1: y_2,
-                y_2: x_2,
-            },
-            14 => Self {
-                x_1: y_1,
-                x_2: x_2,
-                y_1: x_1,
-                y_2: y_2,
-            },
-            15 => Self {
-                x_1: y_1,
-                x_2: x_2,
-                y_1: y_2,
-                y_2: x_1,
-            },
-            16 => Self {
-                x_1: y_1,
-                x_2: y_2,
-                y_1: x_1,
-                y_2: x_2,
-            },
-            17 => Self {
-                x_1: y_1,
-                x_2: y_2,
-                y_1: x_2,
-                y_2: x_1,
-            },
-            18 => Self {
-                x_1: y_2,
-                x_2: x_1,
-                y_1: x_2,
-                y_2: y_1,
-            },
-            19 => Self {
-                x_1: y_2,
-                x_2: x_1,
-                y_1: y_1,
-                y_2: x_2,
-            },
-            20 => Self {
-                x_1: y_2,
-                x_2: x_2,
-                y_1: x_1,
-                y_2: y_1,
-            },
-            21 => Self {
-                x_1: y_2,
-                x_2: x_2,
-                y_1: y_1,
-                y_2: x_1,
-            },
-            22 => Self {
-                x_1: y_2,
-                x_2: y_1,
-                y_1: x_1,
-                y_2: x_2,
-            },
-            23 => Self {
-                x_1: y_2,
-                x_2: y_1,
-                y_1: x_2,
-                y_2: x_1,
-            },
-            _ => unreachable!(),
-        }
-    }
-}
-
-#[test]
-fn test_pos_swap() {
-    let pos = Pos {
-        x_1: 1,
-        x_2: 2,
-        y_1: 3,
-        y_2: 4,
-    };
-
-    for i in 0..24 {
-        let mut swapped = pos.swap(i);
-        let mut j = 0;
-        while swapped != pos {
-            swapped = swapped.swap(i);
-            if j == 24 {
-                panic!();
-            }
-            j += 1;
         }
     }
 }
@@ -615,7 +487,6 @@ pub enum LoadingError {
 }
 
 pub trait Choose<const N: usize> {
-    fn pos_iter(&mut self) -> Vec<Pos>;
     fn choose_value_in_cell(&mut self, cell: Cell<N>) -> Option<u32>;
     fn choose_pop_value_in_cell(&mut self, cell: &mut Cell<N>) -> Option<u32> {
         let value = self.choose_value_in_cell(*cell)?;
@@ -624,36 +495,27 @@ pub trait Choose<const N: usize> {
     }
 }
 
-pub struct ChooseAtRandom<const N: usize> {
-    rng: SmallRng,
-}
-impl<const N: usize> Choose<N> for ChooseAtRandom<N> {
-    fn pos_iter(&mut self) -> Vec<Pos> {
-        let mut all: Vec<Pos> = Pos::iter::<N>().collect();
-        all.shuffle(&mut self.rng);
-        all
-    }
+impl<const N: usize> Choose<N> for SmallRng {
     fn choose_value_in_cell(&mut self, cell: Cell<N>) -> Option<u32> {
-        cell.choose(&mut self.rng)
+        cell.choose(self)
     }
 }
-
-pub struct ChooseFirst<const N: usize>;
-impl<const N: usize> Choose<N> for ChooseFirst<N> {
-    fn pos_iter(&mut self) -> Vec<Pos> {
-        Pos::iter::<N>().collect()
-    }
+impl<const N: usize> Choose<N> for () {
     fn choose_value_in_cell(&mut self, cell: Cell<N>) -> Option<u32> {
         cell.first()
     }
 }
 
-impl<const N: usize> ChooseAtRandom<N> {
-    pub fn new(seed: u32) -> Self {
-        let mut seed_block = [0; 32];
-        seed_block[0..4].copy_from_slice(&seed.to_be_bytes());
-        Self {
-            rng: SmallRng::from_seed(seed_block),
-        }
+pub trait RngChild: Rng + SeedableRng {
+    fn rng_child(&mut self) -> Self {
+        Self::seed_from_u64(self.random())
     }
+}
+impl RngChild for SmallRng {}
+
+pub const fn mask_full<const N: usize>() -> [[[[bool; N]; N]; N]; N] {
+    [[[[true; N]; N]; N]; N]
+}
+pub const fn mask_empty<const N: usize>() -> [[[[bool; N]; N]; N]; N] {
+    [[[[false; N]; N]; N]; N]
 }

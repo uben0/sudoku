@@ -25,3 +25,10 @@ cargo run --release generate 3
 | 7    |  49×49 |
 
 Don't forget to run in `release` mode for instantaneous solving and generation.
+
+## TODO
+
+Add the following remove cascade:
+
+- When for a given row or column, a value is only possible in one square, all other cells of the square can't have this value.
+- When for a given square, a value is only possible in one row or column, all other cells of the row or column can't have this value.

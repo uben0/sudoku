@@ -1,3 +1,5 @@
+let grid_size = 0
+
 function wasm_handler(wasm) {
   const {sudoku_ptr, sudoku_gen, value_to_char, memory} = wasm.instance.exports;
   const ptr = sudoku_ptr();
@@ -41,28 +43,18 @@ function wasm_handler(wasm) {
     seed = seed ? parseInt(seed) : randomSeed();
 
     if (!validSizes.has(size) || !(seed >= 0 && seed < 1000000000)) return;
+    grid_size = size;
 
-    let i = 1;
-    while (true) {
-      let status = document.getElementById("status");
-      status.textContent = "generating attempt " + i + " with seed " + seed;
-      let result = sudoku_gen(size, seed);
-      if (result == 1) {
-        break;
-      }
-      else if (result == 0) {
-        i += 1;
+    while (sudoku_gen(size, seed, true) == 0) {
         seed += 1;
-      }
-      else {
-        status.textContent = "invalid size";
-        break;
-      }
     }
 
     const grid = new Uint8Array(memory.buffer, ptr, size * size * size * size);
     console.log(grid);
     container.appendChild(createGrid(size, grid));
+  }
+  function solveHandler() {
+    
   }
 
   const button = document.getElementById("gen-button");

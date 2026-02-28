@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["sudoku", "sudoku-cli", "sudoku-web"]
+members = ["sudoku", "sudoku_cli", "sudoku_wasm"]
 
 [workspace.dependencies]
 rand = { version = "0.10.0", default-features = false }

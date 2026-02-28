@@ -2,33 +2,33 @@
   description = "A dev shell with Rust nightly";
 
   inputs = {
-    nixpkgs.url      = "github:NixOS/nixpkgs/nixos-unstable";
+         nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.url  = "github:numtide/flake-utils";
+     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = { nixpkgs, rust-overlay, flake-utils, ... }:
+    flake-utils.lib.eachDefaultSystem ( system:
       let
         overlays = [ (import rust-overlay) ];
-        pkgs = import nixpkgs {
-          inherit system overlays;
-        };
-      in
-      with pkgs;
-      {
-        devShells.default = mkShell {
+        pkgs = import nixpkgs { inherit system overlays; };
+      in {
+        devShells.default = pkgs.mkShell {
           buildInputs = [
-            (
-              rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
+            pkgs.bun
+            pkgs.gleam
+            pkgs.erlang
+            pkgs.rebar3
+            pkgs.wasm-tools
+            (pkgs.rust-bin.selectLatestNightlyWith ( toolchain:
+              toolchain.default.override {
                 extensions = [ "rust-src" "rust-analyzer" ];
-                targets = [ "x86_64-unknown-linux-gnu" "wasm32-unknown-unknown" ];
-              })
-            )
-            wasm-tools
+                targets = [ "wasm32-unknown-unknown" ];
+              }
+            ))
           ];
 
-          shellHook = ''exec ${pkgs.fish}/bin/fish'';
+          shellHook = "exec ${pkgs.fish}/bin/fish";
         };
       }
     );

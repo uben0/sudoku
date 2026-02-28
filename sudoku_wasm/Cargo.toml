@@ -1,5 +1,5 @@
 [package]
-name = "sudoku-web"
+name = "sudoku_wasm"
 version = "0.1.0"
 edition = "2024"
 
@@ -9,6 +9,3 @@ crate-type = ["cdylib"]
 [dependencies]
 rand = { workspace = true }
 sudoku = { path = "../sudoku" }
-
-[profile.release]
-opt-level = "s"

@@ -1,21 +1,28 @@
 use clap::Parser;
-use std::{collections::HashSet, path::PathBuf, time::Instant};
-use sudoku::{Cell, ChooseAtRandom, ChooseFirst, Defer, Pos, Sudoku, char_to_value};
+use rand::{SeedableRng, rngs::SmallRng};
+use std::{path::PathBuf, time::Instant};
+use sudoku::{Cell, Defer, Pos, RngChild, Sudoku, char_to_value, mask_full};
 
 #[derive(clap::Parser)]
 struct Args {
     #[command(subcommand)]
     command: Command,
     #[arg(short, long)]
-    seed: Option<u32>,
+    seed: Option<u64>,
     #[arg(default_value_t = 100)]
     retry: usize,
 }
 
 #[derive(clap::Subcommand, Clone)]
 enum Command {
-    Solve { input: PathBuf },
-    Generate { size: u32 },
+    Solve {
+        input: PathBuf,
+    },
+    Generate {
+        size: u32,
+        #[arg(short, long)]
+        sparse: bool,
+    },
 }
 
 const GRID_SIZE_0: usize = 0000;
@@ -70,16 +77,16 @@ fn main() {
                 }
             };
         }
-        Command::Generate { size } => match size {
-            0 => generate::<0>(seed, retry),
-            1 => generate::<1>(seed, retry),
-            2 => generate::<2>(seed, retry),
-            3 => generate::<3>(seed, retry),
-            4 => generate::<4>(seed, retry),
-            5 => generate::<5>(seed, retry),
-            6 => generate::<6>(seed, retry),
-            7 => generate::<7>(seed, retry),
-            8 => generate::<8>(seed, retry),
+        Command::Generate { size, sparse } => match size {
+            0 => generate::<0>(seed, retry, sparse),
+            1 => generate::<1>(seed, retry, sparse),
+            2 => generate::<2>(seed, retry, sparse),
+            3 => generate::<3>(seed, retry, sparse),
+            4 => generate::<4>(seed, retry, sparse),
+            5 => generate::<5>(seed, retry, sparse),
+            6 => generate::<6>(seed, retry, sparse),
+            7 => generate::<7>(seed, retry, sparse),
+            8 => generate::<8>(seed, retry, sparse),
             _ => {
                 eprintln!("invalid grid size {size}, expecting one of 0, 1, 2, 3, 4, 5, 6, 7 or 8.")
             }
@@ -87,15 +94,24 @@ fn main() {
     }
 }
 
-fn generate<const N: usize>(seed: u32, retry: usize) {
+fn generate<const N: usize>(seed: u64, retry: usize, sparse: bool) {
     for seed in (seed..).take(retry) {
-        let chooser = ChooseAtRandom::<N>::new(seed);
+        let mut rng = SmallRng::seed_from_u64(seed);
         let mut grid = Sudoku::<N>::default();
 
         let start = Instant::now();
-        if let Some(solution) = grid.brute_force(chooser, 0..Sudoku::<N>::TTL).next() {
+        if let Some(solution) = grid
+            .brute_force(rng.rng_child(), 0..Sudoku::<N>::TTL)
+            .next()
+        {
             let elapsed = start.elapsed();
-            solution.print(&mut std::io::stdout()).unwrap();
+            let mask = if sparse {
+                solution.obfuscate(&mut rng)
+            } else {
+                mask_full()
+            };
+
+            solution.print(&mut std::io::stdout(), mask).unwrap();
             println!("elapsed: {elapsed:?}");
             return;
         }
@@ -104,7 +120,7 @@ fn generate<const N: usize>(seed: u32, retry: usize) {
     println!("exhausted {retry} attempts without finding a solution");
 }
 
-fn solve<const N: usize, const L: usize>(seed: u32, retry: usize, values: [Option<u32>; L]) {
+fn solve<const N: usize, const L: usize>(seed: u64, retry: usize, values: [Option<u32>; L]) {
     assert_eq!(N * N * N * N, L);
     let mut grid = Sudoku::<N>::default();
     let mut defer = Defer::new();
@@ -119,10 +135,10 @@ fn solve<const N: usize, const L: usize>(seed: u32, retry: usize, values: [Optio
         };
     }
     for (i, solution) in grid
-        .brute_force(ChooseFirst, std::iter::repeat(0))
+        .brute_force(SmallRng::seed_from_u64(seed), std::iter::repeat(0))
         .enumerate()
     {
-        solution.print(&mut std::io::stdout()).unwrap();
+        solution.print(&mut std::io::stdout(), mask_full()).unwrap();
         println!("nth = {}", i + 1);
     }
 }

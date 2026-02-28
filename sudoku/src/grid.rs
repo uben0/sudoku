@@ -55,6 +55,9 @@ impl<const N: usize> Sudoku<N> {
             self.grid[pos] |= Cell::from_value(value);
         }
     }
+    pub const fn is_accepting(&self) -> bool {
+        self.moves.len() == N * N * N * N * (N * N - 1)
+    }
 }
 
 impl<const N: usize> Index<Pos> for Sudoku<N> {
